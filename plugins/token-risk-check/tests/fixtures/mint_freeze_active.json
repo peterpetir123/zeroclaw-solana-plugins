@@ -1,0 +1,10 @@
+{
+  "accounts": {
+    "mint": {
+      "data_base64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMqaOwAAAAAJAQEAAAAqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKg==",
+      "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "lamports": 1000000,
+      "executable": false
+    }
+  }
+}
