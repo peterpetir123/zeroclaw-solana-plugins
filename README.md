@@ -50,14 +50,14 @@ export SOLANA_RPC_URL="https://api.mainnet-beta.solana.com"
 #### 1. Live Token Risk Audit (`token-risk-check`):
 Audit any token mint directly on Solana Mainnet (e.g. USDC `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`):
 ```bash
-cd plugins/token-risk-check
+cd /home/hengkerprotzy/coding/zeroclaw-solana-plugins/plugins/token-risk-check
 cargo run --bin token-risk-check-cli EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
 ```
 
 #### 2. Live Unsigned Transaction Construction (`spl-transfer-build`):
 Construct an unsigned Versioned V0 transaction directly using live Mainnet blockhashes and rent exemptions:
 ```bash
-cd plugins/spl-transfer-build
+cd /home/hengkerprotzy/coding/zeroclaw-solana-plugins/plugins/spl-transfer-build
 cargo run --bin spl-transfer-build-cli 8UQUJWj4XnYFaAZjP79SGiwmrcT3fuy3pD7ig5B5bjW2 EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v 1000000
 ```
 
@@ -67,13 +67,13 @@ cargo run --bin spl-transfer-build-cli 8UQUJWj4XnYFaAZjP79SGiwmrcT3fuy3pD7ig5B5b
 Run all 49 failsafe security tests across the workspace:
 ```bash
 # 1. solana-lite (29 tests)
-cd plugins/solana-lite && cargo test && cd ../..
+cd /home/hengkerprotzy/coding/zeroclaw-solana-plugins/plugins/solana-lite && cargo test
 
 # 2. token-risk-check (11 tests)
-cd plugins/token-risk-check && cargo test && cd ../..
+cd /home/hengkerprotzy/coding/zeroclaw-solana-plugins/plugins/token-risk-check && cargo test
 
 # 3. spl-transfer-build (9 tests)
-cd plugins/spl-transfer-build && cargo test && cd ../..
+cd /home/hengkerprotzy/coding/zeroclaw-solana-plugins/plugins/spl-transfer-build && cargo test
 ```
 
 ---
@@ -81,8 +81,8 @@ cd plugins/spl-transfer-build && cargo test && cd ../..
 ### Step 4: Build WebAssembly (`wasm32-wasip2`) Release Binaries
 Compile the WebAssembly components for production ZeroClaw runtime deployment:
 ```bash
-cd plugins/token-risk-check && cargo build --target wasm32-wasip2 --release && cd ../..
-cd plugins/spl-transfer-build && cargo build --target wasm32-wasip2 --release && cd ../..
+cd /home/hengkerprotzy/coding/zeroclaw-solana-plugins/plugins/token-risk-check && cargo build --target wasm32-wasip2 --release
+cd /home/hengkerprotzy/coding/zeroclaw-solana-plugins/plugins/spl-transfer-build && cargo build --target wasm32-wasip2 --release
 ```
 
 ---
@@ -92,8 +92,8 @@ ZeroClaw CLI (v0.8.3+) uses `zeroclaw skills` subcommands to manage plugins and 
 
 ```bash
 # Install both skills into ZeroClaw
-zeroclaw skills install ./plugins/token-risk-check
-zeroclaw skills install ./plugins/spl-transfer-build
+zeroclaw skills install /home/hengkerprotzy/coding/zeroclaw-solana-plugins/plugins/token-risk-check
+zeroclaw skills install /home/hengkerprotzy/coding/zeroclaw-solana-plugins/plugins/spl-transfer-build
 
 # Verify registered skills
 zeroclaw skills list
