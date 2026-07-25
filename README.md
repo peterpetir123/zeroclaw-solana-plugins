@@ -120,6 +120,19 @@ zeroclaw skills list
 - Built & validated for target **`wasm32-wasip2`** without warnings.
 - Installed & audited under ZeroClaw CLI runtime.
 
+## ⚙️ Model Provider Recommendation
+
+This repository's smoke-test proof (`tool_invoke_proof.log`) was generated using Google Gemini's free tier (`gemini-2.5-flash` via Google AI Studio) purely to demonstrate the plugin execution path (WASM loading → `waki`/`wasi:http` → tool result) without requiring paid credentials for judging/reproduction.
+
+**For production deployment**, we recommend:
+- **Anthropic Claude (Sonnet/Opus)** — strongest instruction-following for approval-gate summaries and tool-use reliability, particularly important for T1/T2 custody flows where misinterpreting a transfer amount or recipient has real financial consequences.
+- **A paid-tier provider generally** — free tiers (Gemini free, etc.) carry tighter rate limits (e.g. Gemini free: 0.5 req/s) unsuitable for cron-polling SOPs or multi-user agent deployments at scale.
+
+Swap providers via `zeroclaw config set agents.main.model_provider <provider>.default` — no plugin code changes required, since the plugins are provider-agnostic (they only communicate via the `tool-plugin` WIT world, not directly with any LLM).
+
+---
+
 ## 📄 License
 
 MIT
+
