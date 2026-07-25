@@ -1,0 +1,35 @@
+# ZeroClaw Standard Operating Procedure (SOP)
+# Workflow: Solana DeFi Guardian & Payment Pipeline
+
+name = "solana-transfer-guard"
+description = "Multi-step security audit and zero-custody transaction construction workflow with human approval checkpoint."
+version = "0.1.0"
+execution_mode = "supervised"
+
+[steps.1_audit_token_risk]
+name = "Audit Token Mint Risk"
+description = "Perform read-only pre-flight risk scan on target SPL/Token-2022 mint."
+tool = "token-risk-check"
+input_schema = { mint_address = "string" }
+fail_action = "halt"
+
+[steps.2_risk_evaluation_gate]
+name = "Evaluate Risk Assessment"
+description = "Gate check evaluating RAG risk findings before drafting transaction."
+rules = [
+  "If status == 'RED', halt workflow and alert operator of active freeze authority or permanent delegate.",
+  "If status == 'AMBER' or 'GREEN', request operator authorization to proceed to transaction construction."
+]
+
+[steps.3_build_unsigned_tx]
+name = "Construct Unsigned Versioned Transaction"
+description = "Construct unsigned Base64 Versioned V0 transaction for SOL/SPL token transfer."
+tool = "spl-transfer-build"
+input_schema = { from = "string", to = "string", amount = "string", mint = "string?", memo = "string?" }
+fail_action = "halt"
+
+[steps.4_human_approval_checkpoint]
+name = "Human Signature & Broadcast Checkpoint"
+description = "T1 Zero-Custody boundary. Return unsigned Base64 payload and human-readable summary to operator for wallet signature."
+approval_required = true
+action = "display_and_await_signature"
