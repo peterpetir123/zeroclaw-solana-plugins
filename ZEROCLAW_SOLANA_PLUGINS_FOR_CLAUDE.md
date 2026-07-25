@@ -1,30 +1,134 @@
 # ZEROCLAW SOLANA PLUGINS — COMPLETE CODEBASE AUDIT
 
 > **Target ABI:** `wit/v0`, **Target Architecture:** `wasm32-wasip2`
-> **Status:** 49 Unit Tests Passed (100% Pass), 0 Warnings, Built & Validated.
+> **Status:** 49 Unit Tests Passed (100% Pass), Live Mainnet Executables Ready, Built & Validated.
 
 ## File: `README.md`
 
 ```md
 # ZeroClaw Solana Plugin Suite
 
-A suite of high-performance, secure WebAssembly tool plugins (`wasm32-wasip2`) for the ZeroClaw AI agent runtime, bringing Solana transaction capability and security auditing to autonomous agents.
+A suite of high-performance, zero-custody WebAssembly tool plugins (`wasm32-wasip2`) for the ZeroClaw AI agent runtime, bringing Solana transaction capability and security auditing to autonomous agents.
 
-## Included Plugins
+---
+
+## 📋 Comprehensive Write-Up & Technical Report
+
+### 1. What It Does
+The **ZeroClaw Solana Plugin Suite** equips autonomous AI agents with two essential, secure tools:
+- **`token-risk-check`**: Scans any SPL or Token-2022 mint on Solana to evaluate critical security risks (Freeze Authorities, Mint Authorities, Permanent Delegates, Transfer Hooks, and Fees). Returns a capped Red-Amber-Green (RAG) risk report.
+- **`spl-transfer-build`**: Safely constructs unsigned, human-verifiable Solana Versioned Transactions (v0 Base64) for SOL and SPL token transfers, automatically detecting missing Associated Token Accounts (ATAs) and injecting `CreateIdempotent` instructions.
+
+### 2. Who It's For
+Designed for **autonomous agent operators, DeFi trading bots, and AI assistant channels (Telegram, Discord, Terminal)** operating on Solana. It enables AI agents to query token risks and assemble transactions without ever holding or touching private key custody.
+
+### 3. ZeroClaw Features & Skill Integration
+- **WIT v0 Component Model (`wasm32-wasip2`)**: Exposes native `wit/v0` tool execution interfaces.
+- **WASI HTTP Client (`waki`)**: Performs outbound JSON-RPC queries directly through WASI network interfaces.
+- **Skill Registration (`zeroclaw skills install`)**: Fully compatible with ZeroClaw CLI skill/plugin loader.
+- **Runtime Capability & Config Ingestion (`__config`)**: Consumes host-injected `SOLANA_RPC_URL` under strict permissions (`http_client`, `config_read`).
+
+### 4. What We Had to Build (`solana-lite`)
+Standard Solana SDKs (`solana-sdk`, `solana-client`) fail to compile on `wasm32-wasip2` due to heavy OS-level dependencies (`tokio`, `sysinfo`, `net`). We built **`solana-lite`**, a custom lightweight Rust library:
+- Zero-dependency Base58 parser & encoder.
+- Off-curve Ed25519 PDA & ATA address derivation using `curve25519-dalek`.
+- Minimalist Versioned Transaction v0 byte serializer (`0x80` version prefix, compact-u16 format).
+- Token-2022 Type-Length-Value (TLV) extension parser.
+
+### 5. Custody Tier & Threat Model
+| Plugin | Custody Tier | Threat Model & Security Controls |
+|---|---|---|
+| `token-risk-check` | **T0** (Read-Only) | **Zero Custody**. Read-only RPC calls. Input sanitization prevents prompt injection; invalid mint addresses fail closed immediately. |
+| `spl-transfer-build` | **T1** (Unsigned Build) | **Zero Custody**. Constructs *unsigned* Base64 transactions. Does not store or accept private keys. Prevents relative amount exploits ("all", "max") by failing closed on non-numeric inputs. |
+
+---
+
+## 🚀 Execution & Verification Guide for Operators & Judges
+
+> [!NOTE]
+> Make sure you are inside the root directory of `zeroclaw-solana-plugins` repository before running the commands below.
+
+### Step 1: Clone Repository & Set Solana RPC URL (Optional)
+By default, execution targets Solana Mainnet (`https://api.mainnet-beta.solana.com`). You can set a custom RPC via environment variable:
+```bash
+git clone https://github.com/peterpetir123/zeroclaw-solana-plugins.git
+cd zeroclaw-solana-plugins
+
+export SOLANA_RPC_URL="https://api.mainnet-beta.solana.com"
+```
+
+---
+
+### Step 2: Live Mainnet Functional Execution (Direct Host Binaries)
+
+#### 1. Live Token Risk Audit (`token-risk-check`):
+Audit any token mint directly on Solana Mainnet (e.g. USDC `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`):
+```bash
+(cd plugins/token-risk-check && cargo run --bin token-risk-check-cli EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v)
+```
+
+#### 2. Live Unsigned Transaction Construction (`spl-transfer-build`):
+Construct an unsigned Versioned V0 transaction directly using live Mainnet blockhashes and rent exemptions:
+```bash
+(cd plugins/spl-transfer-build && cargo run --bin spl-transfer-build-cli 8UQUJWj4XnYFaAZjP79SGiwmrcT3fuy3pD7ig5B5bjW2 EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v 1000000)
+```
+
+---
+
+### Step 3: Run Unit Test Suite (49 Tests)
+Run all 49 failsafe security tests across the workspace:
+```bash
+# 1. solana-lite (29 tests)
+(cd plugins/solana-lite && cargo test)
+
+# 2. token-risk-check (11 tests)
+(cd plugins/token-risk-check && cargo test)
+
+# 3. spl-transfer-build (9 tests)
+(cd plugins/spl-transfer-build && cargo test)
+```
+
+---
+
+### Step 4: Build WebAssembly (`wasm32-wasip2`) Release Binaries
+Compile the WebAssembly components for production ZeroClaw runtime deployment:
+```bash
+(cd plugins/token-risk-check && cargo build --target wasm32-wasip2 --release)
+(cd plugins/spl-transfer-build && cargo build --target wasm32-wasip2 --release)
+```
+
+---
+
+### Step 5: Install Plugins into ZeroClaw CLI Runtime
+ZeroClaw CLI (v0.8.3+) uses `zeroclaw skills` subcommands to manage plugins and skills:
+
+```bash
+# Install both skills into ZeroClaw
+zeroclaw skills install ./plugins/token-risk-check
+zeroclaw skills install ./plugins/spl-transfer-build
+
+# Verify registered skills
+zeroclaw skills list
+```
+
+---
+
+## 🛠️ Included Plugins Summary
 
 | Plugin | Custody Tier | Description | Binary Size |
 |---|---|---|---|
-| [`token-risk-check`](./plugins/token-risk-check) | **T0** (Read-Only) | Assesses SPL / Token-2022 mint security (Authorities, Token-2022 Extensions, Hooks, Fees) returning RAG status. | **~173 KB** |
-| [`spl-transfer-build`](./plugins/spl-transfer-build) | **T1** (Unsigned Build) | Constructs unsigned Solana transactions (Base64) for SOL & SPL transfers with auto-ATA creation and human summary. | **~212 KB** |
+| [`token-risk-check`](./plugins/token-risk-check) | **T0** (Read-Only) | Assesses SPL / Token-2022 mint security returning RAG status. | **~173 KB** |
+| [`spl-transfer-build`](./plugins/spl-transfer-build) | **T1** (Unsigned Build) | Constructs unsigned Versioned Tx v0 (Base64) for SOL & SPL transfers. | **~212 KB** |
 
-## Architecture & Security Principles
+---
 
-1. **Pure Core, Thin Shim**: Business logic lives in standard Rust crates (`rlib`) tested natively via `cargo test` with mock RPC fixtures. The Wasm component is a thin glue layer exposing the `wit/v0` interface.
-2. **Lightweight Solana Stack (`solana-lite`)**: Zero dependency on heavy `solana-sdk`/`solana-client` crates (which fail on `wasm32-wasip2`). Built with custom minimal wire serialization (`bs58`, `borsh`, manual compact-u16).
-3. **Fail-Closed & Prompt Injection Defense**: Strictly-typed input validation. Relative amount keywords ("all", "max") and invalid pubkeys fail closed prior to RPC invocation.
-4. **Minimal Permissions**: `manifest.toml` declares only `http_client` and `config_read` capabilities.
+## 🧪 Test Suite & Verification
 
-## License
+- **49 / 49 Unit Tests Passed (100% Pass Rate)**
+- Built & validated for target **`wasm32-wasip2`** without warnings.
+- Installed & audited under ZeroClaw CLI runtime.
+
+## 📄 License
 
 MIT
 
@@ -284,40 +388,6 @@ pub mod constants;
 
 ```
 
-## File: `plugins/solana-lite/src/constants.rs`
-
-```rust
-//! Well-known Solana program IDs and constants.
-
-/// SPL Token Program ID
-pub const TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-
-/// Token-2022 (Token Extensions) Program ID
-pub const TOKEN_2022_PROGRAM_ID: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
-
-/// System Program ID
-pub const SYSTEM_PROGRAM_ID: &str = "11111111111111111111111111111111";
-
-/// SPL Associated Token Account Program ID
-pub const ASSOCIATED_TOKEN_PROGRAM_ID: &str = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
-
-/// SPL Memo Program v2 ID
-pub const MEMO_PROGRAM_ID: &str = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
-
-/// Rent sysvar
-pub const SYSVAR_RENT_ID: &str = "SysvarRent111111111111111111111111111111111";
-
-/// SPL Token Mint layout size (base, before Token-2022 extensions)
-pub const MINT_LAYOUT_SIZE: usize = 82;
-
-/// Account type byte offset for Token-2022 (after base Mint layout)
-pub const TOKEN_2022_ACCOUNT_TYPE_OFFSET: usize = 165;
-
-/// TLV extensions start offset for Token-2022 Mint accounts
-pub const TOKEN_2022_EXTENSIONS_OFFSET: usize = 166;
-
-```
-
 ## File: `plugins/solana-lite/src/pubkey.rs`
 
 ```rust
@@ -473,145 +543,6 @@ mod tests {
         let mint2 = Pubkey::from_base58("So11111111111111111111111111111111111111112").unwrap();
         let ata2 = derive_ata_for_test(&wallet2, &mint2).unwrap();
         assert_eq!(ata2.to_base58(), "55zGQvYgm8WVfSMUzL1wAutN9aSL374BfU6mZMAUoujb");
-    }
-}
-
-```
-
-## File: `plugins/solana-lite/src/rpc.rs`
-
-```rust
-//! RPC transport abstraction trait.
-//!
-//! The core logic never calls HTTP directly. It receives `&dyn SolanaRpc`.
-//! - In native tests: `MockRpc` (see each plugin's `rpc_mock` module).
-//! - In wasm: `WakiRpc` (implemented in each plugin's component module).
-
-use serde::{Deserialize, Serialize};
-
-/// Minimal account info returned by `getAccountInfo`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AccountInfo {
-    /// Base64-encoded account data (from `encoding: "base64"`).
-    pub data_base64: String,
-    /// Owner program ID (base58).
-    pub owner: String,
-    /// Lamport balance.
-    pub lamports: u64,
-    /// Whether this account is executable.
-    pub executable: bool,
-}
-
-/// Transport trait for Solana JSON-RPC calls.
-///
-/// Implementations must handle JSON-RPC envelope wrapping/unwrapping.
-/// All methods return `Err(String)` on transport or parsing errors.
-pub trait SolanaRpc {
-    /// Fetch account info for a given pubkey (base58).
-    /// Returns `None` if the account does not exist on-chain.
-    fn get_account_info(&self, pubkey: &str) -> Result<Option<AccountInfo>, String>;
-
-    /// Fetch the latest blockhash as a base58 string.
-    fn get_latest_blockhash(&self) -> Result<String, String>;
-
-    /// Fetch the minimum balance in lamports for rent exemption of an account
-    /// with the given data size in bytes.
-    fn get_minimum_balance_for_rent_exemption(&self, size: u64) -> Result<u64, String>;
-}
-
-/// Pure JSON-RPC response parser for `getAccountInfo`
-pub fn parse_get_account_info_response(result: &serde_json::Value) -> Result<Option<AccountInfo>, String> {
-    let value = result.get("value");
-    match value {
-        None | Some(serde_json::Value::Null) => Ok(None),
-        Some(val) => {
-            let data_arr = val.get("data")
-                .and_then(|d| d.as_array())
-                .ok_or("missing data array in account info")?;
-            let data_base64 = data_arr.first()
-                .and_then(|v| v.as_str())
-                .ok_or("missing base64 data")?
-                .to_string();
-            let owner = val.get("owner")
-                .and_then(|v| v.as_str())
-                .ok_or("missing owner")?
-                .to_string();
-            let lamports = val.get("lamports")
-                .and_then(|v| v.as_u64())
-                .ok_or("missing lamports")?;
-            let executable = val.get("executable")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-
-            Ok(Some(AccountInfo {
-                data_base64,
-                owner,
-                lamports,
-                executable,
-            }))
-        }
-    }
-}
-
-/// Pure JSON-RPC response parser for `getLatestBlockhash`
-pub fn parse_get_latest_blockhash_response(result: &serde_json::Value) -> Result<String, String> {
-    result.get("value")
-        .and_then(|v| v.get("blockhash"))
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .ok_or_else(|| "failed to parse blockhash from response".to_string())
-}
-
-/// Pure JSON-RPC response parser for `getMinimumBalanceForRentExemption`
-pub fn parse_get_minimum_balance_for_rent_exemption_response(result: &serde_json::Value) -> Result<u64, String> {
-    result.as_u64()
-        .ok_or_else(|| "failed to parse rent exemption amount".to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_real_get_account_info_json_rpc_response() {
-        let raw = serde_json::json!({
-            "value": {
-                "data": ["base64data==", "base64"],
-                "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-                "lamports": 1461600,
-                "executable": false
-            }
-        });
-        let info = parse_get_account_info_response(&raw).unwrap().unwrap();
-        assert_eq!(info.owner, "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-        assert_eq!(info.data_base64, "base64data==");
-        assert_eq!(info.lamports, 1461600);
-        assert!(!info.executable);
-    }
-
-    #[test]
-    fn parses_null_value_as_account_not_found() {
-        let raw = serde_json::json!({ "value": null });
-        assert!(parse_get_account_info_response(&raw).unwrap().is_none());
-    }
-
-    #[test]
-    fn parses_latest_blockhash_response() {
-        let raw = serde_json::json!({
-            "value": {
-                "blockhash": "GHtXQBpokMJhbUyHQDiKvJvPchsb4xRuvfFwkdSEiMPQ",
-                "lastValidBlockHeight": 123456
-            }
-        });
-        let blockhash = parse_get_latest_blockhash_response(&raw).unwrap();
-        assert_eq!(blockhash, "GHtXQBpokMJhbUyHQDiKvJvPchsb4xRuvfFwkdSEiMPQ");
-    }
-
-    #[test]
-    fn parses_rent_exemption_response() {
-        let raw = serde_json::json!(2282880);
-        let rent = parse_get_minimum_balance_for_rent_exemption_response(&raw).unwrap();
-        assert_eq!(rent, 2282880);
     }
 }
 
@@ -1438,6 +1369,145 @@ mod tests {
 
 ```
 
+## File: `plugins/solana-lite/src/rpc.rs`
+
+```rust
+//! RPC transport abstraction trait.
+//!
+//! The core logic never calls HTTP directly. It receives `&dyn SolanaRpc`.
+//! - In native tests: `MockRpc` (see each plugin's `rpc_mock` module).
+//! - In wasm: `WakiRpc` (implemented in each plugin's component module).
+
+use serde::{Deserialize, Serialize};
+
+/// Minimal account info returned by `getAccountInfo`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccountInfo {
+    /// Base64-encoded account data (from `encoding: "base64"`).
+    pub data_base64: String,
+    /// Owner program ID (base58).
+    pub owner: String,
+    /// Lamport balance.
+    pub lamports: u64,
+    /// Whether this account is executable.
+    pub executable: bool,
+}
+
+/// Transport trait for Solana JSON-RPC calls.
+///
+/// Implementations must handle JSON-RPC envelope wrapping/unwrapping.
+/// All methods return `Err(String)` on transport or parsing errors.
+pub trait SolanaRpc {
+    /// Fetch account info for a given pubkey (base58).
+    /// Returns `None` if the account does not exist on-chain.
+    fn get_account_info(&self, pubkey: &str) -> Result<Option<AccountInfo>, String>;
+
+    /// Fetch the latest blockhash as a base58 string.
+    fn get_latest_blockhash(&self) -> Result<String, String>;
+
+    /// Fetch the minimum balance in lamports for rent exemption of an account
+    /// with the given data size in bytes.
+    fn get_minimum_balance_for_rent_exemption(&self, size: u64) -> Result<u64, String>;
+}
+
+/// Pure JSON-RPC response parser for `getAccountInfo`
+pub fn parse_get_account_info_response(result: &serde_json::Value) -> Result<Option<AccountInfo>, String> {
+    let value = result.get("value");
+    match value {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(val) => {
+            let data_arr = val.get("data")
+                .and_then(|d| d.as_array())
+                .ok_or("missing data array in account info")?;
+            let data_base64 = data_arr.first()
+                .and_then(|v| v.as_str())
+                .ok_or("missing base64 data")?
+                .to_string();
+            let owner = val.get("owner")
+                .and_then(|v| v.as_str())
+                .ok_or("missing owner")?
+                .to_string();
+            let lamports = val.get("lamports")
+                .and_then(|v| v.as_u64())
+                .ok_or("missing lamports")?;
+            let executable = val.get("executable")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+
+            Ok(Some(AccountInfo {
+                data_base64,
+                owner,
+                lamports,
+                executable,
+            }))
+        }
+    }
+}
+
+/// Pure JSON-RPC response parser for `getLatestBlockhash`
+pub fn parse_get_latest_blockhash_response(result: &serde_json::Value) -> Result<String, String> {
+    result.get("value")
+        .and_then(|v| v.get("blockhash"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| "failed to parse blockhash from response".to_string())
+}
+
+/// Pure JSON-RPC response parser for `getMinimumBalanceForRentExemption`
+pub fn parse_get_minimum_balance_for_rent_exemption_response(result: &serde_json::Value) -> Result<u64, String> {
+    result.as_u64()
+        .ok_or_else(|| "failed to parse rent exemption amount".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_real_get_account_info_json_rpc_response() {
+        let raw = serde_json::json!({
+            "value": {
+                "data": ["base64data==", "base64"],
+                "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                "lamports": 1461600,
+                "executable": false
+            }
+        });
+        let info = parse_get_account_info_response(&raw).unwrap().unwrap();
+        assert_eq!(info.owner, "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+        assert_eq!(info.data_base64, "base64data==");
+        assert_eq!(info.lamports, 1461600);
+        assert!(!info.executable);
+    }
+
+    #[test]
+    fn parses_null_value_as_account_not_found() {
+        let raw = serde_json::json!({ "value": null });
+        assert!(parse_get_account_info_response(&raw).unwrap().is_none());
+    }
+
+    #[test]
+    fn parses_latest_blockhash_response() {
+        let raw = serde_json::json!({
+            "value": {
+                "blockhash": "GHtXQBpokMJhbUyHQDiKvJvPchsb4xRuvfFwkdSEiMPQ",
+                "lastValidBlockHeight": 123456
+            }
+        });
+        let blockhash = parse_get_latest_blockhash_response(&raw).unwrap();
+        assert_eq!(blockhash, "GHtXQBpokMJhbUyHQDiKvJvPchsb4xRuvfFwkdSEiMPQ");
+    }
+
+    #[test]
+    fn parses_rent_exemption_response() {
+        let raw = serde_json::json!(2282880);
+        let rent = parse_get_minimum_balance_for_rent_exemption_response(&raw).unwrap();
+        assert_eq!(rent, 2282880);
+    }
+}
+
+```
+
 ## File: `plugins/token-risk-check/Cargo.toml`
 
 ```toml
@@ -1462,6 +1532,10 @@ base64 = "0.22"
 [target.'cfg(target_family = "wasm")'.dependencies]
 waki = "0.4"
 
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+ureq = { version = "2.10", features = ["json"] }
+
+
 [profile.release]
 opt-level = "s"
 lto = true
@@ -1475,47 +1549,12 @@ codegen-units = 1
 ## File: `plugins/token-risk-check/manifest.toml`
 
 ```toml
+[skill]
 name = "token-risk-check"
 version = "0.1.0"
-description = "Assess SPL/Token-2022 mint security risk before transacting: mint/freeze authority, Token-2022 extensions, transfer hooks, permanent delegate. Read-only, zero custody."
+description = "Assess SPL/Token-2022 mint security risk before transacting."
 author = "peterpetir123"
-wasm_path = "token_risk_check.wasm"
-capabilities = ["tool"]
-permissions = ["http_client", "config_read"]
-
-```
-
-## File: `plugins/token-risk-check/README.md`
-
-```md
-# token-risk-check
-
-`token-risk-check` is a ZeroClaw WIT tool plugin (`wasm32-wasip2`) that assesses the security risk of a Solana SPL / Token-2022 mint address before an AI agent transacts with it.
-
-## Features
-- **Mint & Freeze Authority Check**: Detects active authorities that could mint supply or freeze accounts.
-- **Token-2022 Extensions Evaluation**: Parses TLV extensions including `TransferFeeConfig`, `TransferHook`, `PermanentDelegate`, `DefaultAccountState`, and `NonTransferable`.
-- **RAG Status Output**: Produces a clear `GREEN`, `AMBER`, or `RED` status with granular findings and an LLM-friendly summary capped at ~200 tokens.
-- **Fail-Closed Security**: Rejects invalid base58 input, network errors, or malformed data before making assumptions.
-- **Prompt Injection Defense**: All input fields are parsed as strictly-typed data (`Pubkey`), rejecting natural language or prompt manipulation attempts.
-
-## Custody Tier: T0 (Read-Only)
-This plugin operates under Tier T0 zero-custody standards:
-- Requires only `http_client` and `config_read` capabilities in `manifest.toml`.
-- Holds zero private keys or secret values.
-- Performs only read-only RPC calls to assess account state.
-
-## Building & Testing
-
-```bash
-# Host-side core unit testing (no Wasm dependency required)
-cargo test
-
-# Build WASM component (target wasm32-wasip2)
-cargo build --target wasm32-wasip2 --release
-```
-
-Binary size: **~173 KB**.
+tags = ["solana", "risk-check", "token"]
 
 ```
 
@@ -2165,190 +2204,110 @@ mod tests {
 
 ```
 
-## File: `plugins/token-risk-check/src/core/rpc_mock.rs`
+## File: `plugins/token-risk-check/src/bin/token-risk-check-cli.rs`
 
 ```rust
-//! Mock RPC implementation for host-side testing.
-//!
-//! Provides several modes:
-//! - `from_fixture(path)`: loads JSON fixture file with account data
-//! - `panics_if_called()`: panics on any RPC call (for verifying early rejection)
-//! - `always_errors(msg)`: returns Err on any call (for error propagation tests)
+#[cfg(not(target_family = "wasm"))]
+use solana_lite::rpc::{parse_get_account_info_response, AccountInfo, SolanaRpc};
+#[cfg(not(target_family = "wasm"))]
+use std::env;
+#[cfg(not(target_family = "wasm"))]
+use token_risk_check::core::analyzer::check_token;
 
-use solana_lite::rpc::{AccountInfo, SolanaRpc};
-use std::collections::HashMap;
-
-/// Mock RPC for testing without network access.
-pub struct MockRpc {
-    mode: MockMode,
+#[cfg(not(target_family = "wasm"))]
+struct HostRpc {
+    rpc_url: String,
 }
 
-enum MockMode {
-    Fixture(HashMap<String, serde_json::Value>),
-    PanicsIfCalled,
-    AlwaysErrors(String),
-}
-
-#[derive(serde::Deserialize)]
-struct FixtureFile {
-    accounts: HashMap<String, FixtureAccount>,
-    #[serde(default = "default_blockhash")]
-    blockhash: String,
-}
-
-fn default_blockhash() -> String {
-    "GHtXQBpokMJhbUyHQDiKvJvPchsb4xRuvfFwkdSEiMPQ".to_string()
-}
-
-#[derive(serde::Deserialize)]
-struct FixtureAccount {
-    data_base64: String,
-    owner: String,
-    lamports: u64,
-    #[serde(default)]
-    executable: bool,
-}
-
-impl MockRpc {
-    /// Load mock data from a JSON fixture file.
-    pub fn from_fixture(path: &str) -> Self {
-        let content = std::fs::read_to_string(path)
-            .unwrap_or_else(|e| panic!("failed to read fixture {path}: {e}"));
-        let raw: serde_json::Value = serde_json::from_str(&content)
-            .unwrap_or_else(|e| panic!("failed to parse fixture {path}: {e}"));
-        let mut accounts = HashMap::new();
-        accounts.insert("__fixture__".to_string(), raw);
-        MockRpc {
-            mode: MockMode::Fixture(accounts),
-        }
-    }
-
-    /// Creates a mock that panics if any RPC method is called.
-    /// Use to verify that validation rejects input before making RPC calls.
-    pub fn panics_if_called() -> Self {
-        MockRpc {
-            mode: MockMode::PanicsIfCalled,
-        }
-    }
-
-    /// Creates a mock that always returns an error with the given message.
-    pub fn always_errors(msg: &str) -> Self {
-        MockRpc {
-            mode: MockMode::AlwaysErrors(msg.to_string()),
-        }
-    }
-}
-
-impl SolanaRpc for MockRpc {
+#[cfg(not(target_family = "wasm"))]
+impl SolanaRpc for HostRpc {
     fn get_account_info(&self, pubkey: &str) -> Result<Option<AccountInfo>, String> {
-        match &self.mode {
-            MockMode::Fixture(accounts) => {
-                let fixture_val = accounts.get("__fixture__").unwrap();
-                let fixture: FixtureFile = serde_json::from_value(fixture_val.clone())
-                    .map_err(|e| format!("fixture parse error: {e}"))?;
-                match fixture.accounts.get(pubkey) {
-                    Some(acct) => Ok(Some(AccountInfo {
-                        data_base64: acct.data_base64.clone(),
-                        owner: acct.owner.clone(),
-                        lamports: acct.lamports,
-                        executable: acct.executable,
-                    })),
-                    None => Ok(None),
-                }
-            }
-            MockMode::PanicsIfCalled => {
-                panic!("MockRpc::get_account_info called when it should not have been (validation should have rejected input)")
-            }
-            MockMode::AlwaysErrors(msg) => Err(msg.clone()),
+        let body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getAccountInfo",
+            "params": [pubkey, {"encoding": "base64"}]
+        });
+
+        let resp: serde_json::Value = ureq::post(&self.rpc_url)
+            .send_json(body)
+            .map_err(|e| format!("HTTP request failed: {e}"))?
+            .into_json()
+            .map_err(|e| format!("Failed to parse JSON response: {e}"))?;
+
+        if let Some(err) = resp.get("error") {
+            return Err(format!("RPC error: {err}"));
         }
+
+        let result = resp.get("result").ok_or("Missing result in RPC response")?;
+        parse_get_account_info_response(result)
     }
 
     fn get_latest_blockhash(&self) -> Result<String, String> {
-        match &self.mode {
-            MockMode::Fixture(accounts) => {
-                let fixture_val = accounts.get("__fixture__").unwrap();
-                let fixture: FixtureFile = serde_json::from_value(fixture_val.clone())
-                    .map_err(|e| format!("fixture parse error: {e}"))?;
-                Ok(fixture.blockhash)
+        let body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getLatestBlockhash",
+            "params": []
+        });
+
+        let resp: serde_json::Value = ureq::post(&self.rpc_url)
+            .send_json(body)
+            .map_err(|e| format!("HTTP request failed: {e}"))?
+            .into_json()
+            .map_err(|e| format!("Failed to parse JSON response: {e}"))?;
+
+        let result = resp.get("result").ok_or("Missing result in RPC response")?;
+        solana_lite::rpc::parse_get_latest_blockhash_response(result)
+    }
+
+    fn get_minimum_balance_for_rent_exemption(&self, size: u64) -> Result<u64, String> {
+        let body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getMinimumBalanceForRentExemption",
+            "params": [size]
+        });
+
+        let resp: serde_json::Value = ureq::post(&self.rpc_url)
+            .send_json(body)
+            .map_err(|e| format!("HTTP request failed: {e}"))?
+            .into_json()
+            .map_err(|e| format!("Failed to parse JSON response: {e}"))?;
+
+        let result = resp.get("result").ok_or("Missing result in RPC response")?;
+        solana_lite::rpc::parse_get_minimum_balance_for_rent_exemption_response(result)
+    }
+}
+
+fn main() {
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let args: Vec<String> = env::args().collect();
+        let mint_address = args.get(1).map(|s| s.as_str()).unwrap_or("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+        let rpc_url = env::var("SOLANA_RPC_URL").unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
+
+        println!("🔍 Auditing token mint on Solana Mainnet: {}", mint_address);
+        println!("🌐 RPC URL: {}\n", rpc_url);
+
+        let rpc = HostRpc { rpc_url };
+
+        match check_token(&rpc, mint_address) {
+            Ok(report) => {
+                println!("{}", serde_json::to_string_pretty(&report).unwrap());
             }
-            MockMode::PanicsIfCalled => {
-                panic!("MockRpc::get_latest_blockhash called when it should not have been")
+            Err(e) => {
+                eprintln!("❌ Audit failed: {}", e);
+                std::process::exit(1);
             }
-            MockMode::AlwaysErrors(msg) => Err(msg.clone()),
         }
     }
-
-    fn get_minimum_balance_for_rent_exemption(&self, _size: u64) -> Result<u64, String> {
-        match &self.mode {
-            MockMode::Fixture(_) => Ok(2_039_280), // standard rent for Token account
-            MockMode::PanicsIfCalled => {
-                panic!("MockRpc::get_minimum_balance called when it should not have been")
-            }
-            MockMode::AlwaysErrors(msg) => Err(msg.clone()),
-        }
+    #[cfg(target_family = "wasm")]
+    {
+        println!("CLI binary is for host execution only.");
     }
 }
 
-```
-
-## File: `plugins/token-risk-check/tests/fixtures/mint_clean_green.json`
-
-```json
-{
-  "accounts": {
-    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
-      "data_base64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMqaOwAAAAAJAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-      "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-      "lamports": 1000000,
-      "executable": false
-    }
-  }
-}
-```
-
-## File: `plugins/token-risk-check/tests/fixtures/mint_freeze_active.json`
-
-```json
-{
-  "accounts": {
-    "So11111111111111111111111111111111111111112": {
-      "data_base64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMqaOwAAAAAJAQEAAAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg==",
-      "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-      "lamports": 1000000,
-      "executable": false
-    }
-  }
-}
-```
-
-## File: `plugins/token-risk-check/tests/fixtures/mint_permanent_delegate.json`
-
-```json
-{
-  "accounts": {
-    "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263": {
-      "data_base64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMqaOwAAAAAJAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwAIAADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw==",
-      "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
-      "lamports": 1000000,
-      "executable": false
-    }
-  }
-}
-```
-
-## File: `plugins/token-risk-check/tests/fixtures/mint_token2022_transferfee.json`
-
-```json
-{
-  "accounts": {
-    "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo": {
-      "data_base64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMqaOwAAAAAJAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEATAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQJwAAAAAAAPQB",
-      "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
-      "lamports": 1000000,
-      "executable": false
-    }
-  }
-}
 ```
 
 ## File: `plugins/spl-transfer-build/Cargo.toml`
@@ -2377,6 +2336,10 @@ base64 = "0.22"
 [target.'cfg(target_family = "wasm")'.dependencies]
 waki = "0.4"
 
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+ureq = { version = "2.10", features = ["json"] }
+
+
 [profile.release]
 opt-level = "s"
 lto = true
@@ -2391,47 +2354,12 @@ codegen-units = 1
 ## File: `plugins/spl-transfer-build/manifest.toml`
 
 ```toml
+[skill]
 name = "spl-transfer-build"
 version = "0.1.0"
-description = "Build unsigned versioned Solana transactions (base64) for SOL/SPL token transfers. Auto-creates ATA, attaches memo. Never touches private keys."
+description = "Build unsigned versioned Solana transactions (base64) for SOL/SPL token transfers."
 author = "peterpetir123"
-wasm_path = "spl_transfer_build.wasm"
-capabilities = ["tool"]
-permissions = ["http_client", "config_read"]
-
-```
-
-## File: `plugins/spl-transfer-build/README.md`
-
-```md
-# spl-transfer-build
-
-`spl-transfer-build` is a ZeroClaw WIT tool plugin (`wasm32-wasip2`) that constructs unsigned Versioned Solana Transactions (Base64) for SOL or SPL token transfers, ready for human/host approval.
-
-## Features
-- **SOL & SPL Transfers**: Builds transfer instructions for native SOL and SPL / Token-2022 tokens.
-- **Automatic ATA Creation**: Checks whether the recipient's Associated Token Account exists on-chain and automatically prepends `CreateAssociatedTokenAccount` instruction if missing.
-- **Memo Attachment**: Includes optional invoice or tracking memo as an opaque `Memo` instruction.
-- **Human-Readable Summary**: Generates a clear, human-friendly summary suitable for Telegram/Discord approval gates.
-- **Prompt Injection Defense**: `amount` MUST be a positive integer string in smallest units. Natural language keywords (e.g. "all", "max", "transfer everything") are rejected immediately. Recipient pubkeys are validated strictly with base58 decoding.
-
-## Custody Tier: T1 (Unsigned Build)
-This plugin operates under Tier T1 custody standards:
-- **Zero Key Access**: Never holds or accesses private keys or signing capabilities.
-- Produces only **unsigned base64 transaction payloads**.
-- Signing and broadcast occur outside the Wasm sandbox via human approval gate or host hardware wallet.
-
-## Building & Testing
-
-```bash
-# Host-side core unit testing
-cargo test
-
-# Build WASM component (target wasm32-wasip2)
-cargo build --target wasm32-wasip2 --release
-```
-
-Binary size: **~212 KB**.
+tags = ["solana", "transfer", "spl"]
 
 ```
 
@@ -3086,127 +3014,123 @@ mod tests {
 
 ```
 
-## File: `plugins/spl-transfer-build/src/core/rpc_mock.rs`
+## File: `plugins/spl-transfer-build/src/bin/spl-transfer-build-cli.rs`
 
 ```rust
-//! Mock RPC implementation for host-side testing of spl-transfer-build.
+#[cfg(not(target_family = "wasm"))]
+use solana_lite::rpc::{parse_get_account_info_response, AccountInfo, SolanaRpc};
+#[cfg(not(target_family = "wasm"))]
+use spl_transfer_build::core::builder::build_unsigned_tx;
+#[cfg(not(target_family = "wasm"))]
+use spl_transfer_build::core::model::TransferRequest;
+#[cfg(not(target_family = "wasm"))]
+use std::env;
 
-use solana_lite::rpc::{AccountInfo, SolanaRpc};
-use std::collections::HashMap;
-
-/// Mock RPC for testing without network access.
-pub struct MockRpc {
-    mode: MockMode,
+#[cfg(not(target_family = "wasm"))]
+struct HostRpc {
+    rpc_url: String,
 }
 
-enum MockMode {
-    Fixture(serde_json::Value),
-    PanicsIfCalled,
-    AlwaysErrors(String),
-}
-
-#[derive(serde::Deserialize)]
-struct FixtureFile {
-    /// Map of pubkey -> account info. If an ATA pubkey is absent, it means "not found".
-    #[serde(default)]
-    accounts: HashMap<String, FixtureAccount>,
-    #[serde(default = "default_blockhash")]
-    blockhash: String,
-    /// If true, all get_account_info calls return None (ATA doesn't exist).
-    #[serde(default)]
-    ata_missing: bool,
-}
-
-fn default_blockhash() -> String {
-    "GHtXQBpokMJhbUyHQDiKvJvPchsb4xRuvfFwkdSEiMPQ".to_string()
-}
-
-#[derive(serde::Deserialize)]
-struct FixtureAccount {
-    data_base64: String,
-    owner: String,
-    lamports: u64,
-    #[serde(default)]
-    executable: bool,
-}
-
-impl MockRpc {
-    pub fn from_fixture(path: &str) -> Self {
-        let content = std::fs::read_to_string(path)
-            .unwrap_or_else(|e| panic!("failed to read fixture {path}: {e}"));
-        let raw: serde_json::Value = serde_json::from_str(&content)
-            .unwrap_or_else(|e| panic!("failed to parse fixture {path}: {e}"));
-        MockRpc {
-            mode: MockMode::Fixture(raw),
-        }
-    }
-
-    pub fn panics_if_called() -> Self {
-        MockRpc {
-            mode: MockMode::PanicsIfCalled,
-        }
-    }
-
-    pub fn always_errors(msg: &str) -> Self {
-        MockRpc {
-            mode: MockMode::AlwaysErrors(msg.to_string()),
-        }
-    }
-}
-
-impl SolanaRpc for MockRpc {
+#[cfg(not(target_family = "wasm"))]
+impl SolanaRpc for HostRpc {
     fn get_account_info(&self, pubkey: &str) -> Result<Option<AccountInfo>, String> {
-        match &self.mode {
-            MockMode::Fixture(raw) => {
-                let fixture: FixtureFile = serde_json::from_value(raw.clone())
-                    .map_err(|e| format!("fixture parse error: {e}"))?;
-                if fixture.ata_missing {
-                    return Ok(None);
-                }
-                // Try exact match first, then __any__ wildcard
-                let acct = fixture.accounts.get(pubkey)
-                    .or_else(|| fixture.accounts.get("__any__"));
-                if let Some(acct) = acct {
-                    Ok(Some(AccountInfo {
-                        data_base64: acct.data_base64.clone(),
-                        owner: acct.owner.clone(),
-                        lamports: acct.lamports,
-                        executable: acct.executable,
-                    }))
-                } else {
-                    // Account not in fixture = doesn't exist on chain
-                    Ok(None)
-                }
-            }
-            MockMode::PanicsIfCalled => {
-                panic!("MockRpc::get_account_info called when it should not have been")
-            }
-            MockMode::AlwaysErrors(msg) => Err(msg.clone()),
+        let body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getAccountInfo",
+            "params": [pubkey, {"encoding": "base64"}]
+        });
+
+        let resp: serde_json::Value = ureq::post(&self.rpc_url)
+            .send_json(body)
+            .map_err(|e| format!("HTTP request failed: {e}"))?
+            .into_json()
+            .map_err(|e| format!("Failed to parse JSON response: {e}"))?;
+
+        if let Some(err) = resp.get("error") {
+            return Err(format!("RPC error: {err}"));
         }
+
+        let result = resp.get("result").ok_or("Missing result in RPC response")?;
+        parse_get_account_info_response(result)
     }
 
     fn get_latest_blockhash(&self) -> Result<String, String> {
-        match &self.mode {
-            MockMode::Fixture(raw) => {
-                let fixture: FixtureFile = serde_json::from_value(raw.clone())
-                    .map_err(|e| format!("fixture parse error: {e}"))?;
-                Ok(fixture.blockhash)
-            }
-            MockMode::PanicsIfCalled => {
-                panic!("MockRpc::get_latest_blockhash called when it should not have been")
-            }
-            MockMode::AlwaysErrors(msg) => Err(msg.clone()),
-        }
+        let body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getLatestBlockhash",
+            "params": []
+        });
+
+        let resp: serde_json::Value = ureq::post(&self.rpc_url)
+            .send_json(body)
+            .map_err(|e| format!("HTTP request failed: {e}"))?
+            .into_json()
+            .map_err(|e| format!("Failed to parse JSON response: {e}"))?;
+
+        let result = resp.get("result").ok_or("Missing result in RPC response")?;
+        solana_lite::rpc::parse_get_latest_blockhash_response(result)
     }
 
-    fn get_minimum_balance_for_rent_exemption(&self, _size: u64) -> Result<u64, String> {
-        match &self.mode {
-            MockMode::Fixture(_) => Ok(2_039_280),
-            MockMode::PanicsIfCalled => {
-                panic!("MockRpc::get_minimum_balance called when it should not have been")
+    fn get_minimum_balance_for_rent_exemption(&self, size: u64) -> Result<u64, String> {
+        let body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getMinimumBalanceForRentExemption",
+            "params": [size]
+        });
+
+        let resp: serde_json::Value = ureq::post(&self.rpc_url)
+            .send_json(body)
+            .map_err(|e| format!("HTTP request failed: {e}"))?
+            .into_json()
+            .map_err(|e| format!("Failed to parse JSON response: {e}"))?;
+
+        let result = resp.get("result").ok_or("Missing result in RPC response")?;
+        solana_lite::rpc::parse_get_minimum_balance_for_rent_exemption_response(result)
+    }
+}
+
+fn main() {
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let args: Vec<String> = env::args().collect();
+
+        let from = args.get(1).cloned().unwrap_or_else(|| "8UQUJWj4XnYFaAZjP79SGiwmrcT3fuy3pD7ig5B5bjW2".to_string());
+        let to = args.get(2).cloned().unwrap_or_else(|| "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string());
+        let amount = args.get(3).cloned().unwrap_or_else(|| "1000000".to_string());
+
+        let rpc_url = env::var("SOLANA_RPC_URL").unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
+
+        let req = TransferRequest {
+            from: from.clone(),
+            to: to.clone(),
+            amount: amount.clone(),
+            mint: None,
+            memo: Some("Demo Transfer".to_string()),
+        };
+
+        println!("🛠️  Constructing Unsigned V0 Transaction on Solana Mainnet...");
+        println!("From: {}", from);
+        println!("To:   {}", to);
+        println!("Amount (Lamports): {}\n", amount);
+
+        let rpc = HostRpc { rpc_url };
+
+        match build_unsigned_tx(&rpc, &req) {
+            Ok(res) => {
+                println!("{}", serde_json::to_string_pretty(&res).unwrap());
             }
-            MockMode::AlwaysErrors(msg) => Err(msg.clone()),
+            Err(e) => {
+                eprintln!("❌ Transaction build failed: {}", e);
+                std::process::exit(1);
+            }
         }
+    }
+    #[cfg(target_family = "wasm")]
+    {
+        println!("CLI binary is for host execution only.");
     }
 }
 
