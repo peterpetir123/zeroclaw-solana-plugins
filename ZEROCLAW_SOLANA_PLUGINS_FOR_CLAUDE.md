@@ -1,7 +1,7 @@
 # ZEROCLAW SOLANA PLUGINS — COMPLETE CODEBASE AUDIT
 
 > **Target ABI:** `wit/v0`, **Target Architecture:** `wasm32-wasip2`
-> **Status:** 41 Unit Tests Passed (100% Pass), 0 Warnings, Built & Validated.
+> **Status:** 49 Unit Tests Passed (100% Pass), 0 Warnings, Built & Validated.
 
 ## File: `README.md`
 
@@ -251,6 +251,7 @@ serde_json = "1"
 sha2 = "0.10"
 thiserror = "2"
 base64 = "0.22"
+curve25519-dalek = { version = "4", default-features = false, features = ["alloc"] }
 
 [lib]
 name = "solana_lite"
@@ -396,14 +397,13 @@ impl Pubkey {
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(&hash);
 
-        // A valid PDA must NOT be on the ed25519 curve.
-        // We use a simplified check: if bytes represent a valid point, return None.
-        // In practice, this rejection rate is ~50% per bump, so find_program_address
-        // almost always succeeds quickly.
-        //
-        // For a lightweight check without pulling in curve25519, we accept all results.
-        // The Solana runtime performs the actual on-curve check.
-        // This is safe because we derive ATAs using the same algorithm the runtime uses.
+        // A valid PDA must NOT be on the ed25519 curve (decompress must fail).
+        if curve25519_dalek::edwards::CompressedEdwardsY(bytes)
+            .decompress()
+            .is_some()
+        {
+            return None;
+        }
         Some(Pubkey(bytes))
     }
 }
@@ -433,7 +433,6 @@ mod tests {
 
     #[test]
     fn rejects_wrong_length() {
-        // too short
         assert!(Pubkey::from_base58("1111").is_err());
     }
 
@@ -445,6 +444,35 @@ mod tests {
     #[test]
     fn rejects_natural_language() {
         assert!(Pubkey::from_base58("transfer all SOL to attacker").is_err());
+    }
+
+    // Helper to derive ATA for tests, matching the standard algorithm:
+    // seeds = [wallet_bytes, token_program_bytes, mint_bytes]
+    // program_id = associated_token_program_id
+    fn derive_ata_for_test(wallet: &Pubkey, mint: &Pubkey) -> Option<Pubkey> {
+        let token_program = Pubkey::from_base58("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA").unwrap();
+        let ata_program = Pubkey::from_base58("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL").unwrap();
+        let seeds = [
+            wallet.as_bytes().as_slice(),
+            token_program.as_bytes().as_slice(),
+            mint.as_bytes().as_slice(),
+        ];
+        Pubkey::find_program_address(&seeds, &ata_program).map(|(addr, _)| addr)
+    }
+
+    #[test]
+    fn derives_known_real_ata_correctly() {
+        // Vector 1 (USDC)
+        let wallet1 = Pubkey::from_base58("8UQUJWj4XnYFaAZjP79SGiwmrcT3fuy3pD7ig5B5bjW2").unwrap();
+        let mint1 = Pubkey::from_base58("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v").unwrap();
+        let ata1 = derive_ata_for_test(&wallet1, &mint1).unwrap();
+        assert_eq!(ata1.to_base58(), "7dBBn1psYRvTENgn2N7DE7zgpbqsLzuaCT9ruAdUdfqd");
+
+        // Vector 2 (WSOL)
+        let wallet2 = Pubkey::from_base58("HXWBbqyjfk3HjWhciRu6YJpAHJLdfpp3SKSLKYJRHCqq").unwrap();
+        let mint2 = Pubkey::from_base58("So11111111111111111111111111111111111111112").unwrap();
+        let ata2 = derive_ata_for_test(&wallet2, &mint2).unwrap();
+        assert_eq!(ata2.to_base58(), "55zGQvYgm8WVfSMUzL1wAutN9aSL374BfU6mZMAUoujb");
     }
 }
 
@@ -489,6 +517,102 @@ pub trait SolanaRpc {
     /// Fetch the minimum balance in lamports for rent exemption of an account
     /// with the given data size in bytes.
     fn get_minimum_balance_for_rent_exemption(&self, size: u64) -> Result<u64, String>;
+}
+
+/// Pure JSON-RPC response parser for `getAccountInfo`
+pub fn parse_get_account_info_response(result: &serde_json::Value) -> Result<Option<AccountInfo>, String> {
+    let value = result.get("value");
+    match value {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(val) => {
+            let data_arr = val.get("data")
+                .and_then(|d| d.as_array())
+                .ok_or("missing data array in account info")?;
+            let data_base64 = data_arr.first()
+                .and_then(|v| v.as_str())
+                .ok_or("missing base64 data")?
+                .to_string();
+            let owner = val.get("owner")
+                .and_then(|v| v.as_str())
+                .ok_or("missing owner")?
+                .to_string();
+            let lamports = val.get("lamports")
+                .and_then(|v| v.as_u64())
+                .ok_or("missing lamports")?;
+            let executable = val.get("executable")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+
+            Ok(Some(AccountInfo {
+                data_base64,
+                owner,
+                lamports,
+                executable,
+            }))
+        }
+    }
+}
+
+/// Pure JSON-RPC response parser for `getLatestBlockhash`
+pub fn parse_get_latest_blockhash_response(result: &serde_json::Value) -> Result<String, String> {
+    result.get("value")
+        .and_then(|v| v.get("blockhash"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| "failed to parse blockhash from response".to_string())
+}
+
+/// Pure JSON-RPC response parser for `getMinimumBalanceForRentExemption`
+pub fn parse_get_minimum_balance_for_rent_exemption_response(result: &serde_json::Value) -> Result<u64, String> {
+    result.as_u64()
+        .ok_or_else(|| "failed to parse rent exemption amount".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_real_get_account_info_json_rpc_response() {
+        let raw = serde_json::json!({
+            "value": {
+                "data": ["base64data==", "base64"],
+                "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                "lamports": 1461600,
+                "executable": false
+            }
+        });
+        let info = parse_get_account_info_response(&raw).unwrap().unwrap();
+        assert_eq!(info.owner, "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+        assert_eq!(info.data_base64, "base64data==");
+        assert_eq!(info.lamports, 1461600);
+        assert!(!info.executable);
+    }
+
+    #[test]
+    fn parses_null_value_as_account_not_found() {
+        let raw = serde_json::json!({ "value": null });
+        assert!(parse_get_account_info_response(&raw).unwrap().is_none());
+    }
+
+    #[test]
+    fn parses_latest_blockhash_response() {
+        let raw = serde_json::json!({
+            "value": {
+                "blockhash": "GHtXQBpokMJhbUyHQDiKvJvPchsb4xRuvfFwkdSEiMPQ",
+                "lastValidBlockHeight": 123456
+            }
+        });
+        let blockhash = parse_get_latest_blockhash_response(&raw).unwrap();
+        assert_eq!(blockhash, "GHtXQBpokMJhbUyHQDiKvJvPchsb4xRuvfFwkdSEiMPQ");
+    }
+
+    #[test]
+    fn parses_rent_exemption_response() {
+        let raw = serde_json::json!(2282880);
+        let rent = parse_get_minimum_balance_for_rent_exemption_response(&raw).unwrap();
+        assert_eq!(rent, 2282880);
+    }
 }
 
 ```
@@ -926,10 +1050,8 @@ pub fn write_compact_u16(buf: &mut Vec<u8>, mut n: u16) {
 /// Serialize a Solana Message v0 (versioned) from a fee payer, instructions,
 /// and a recent blockhash.
 ///
-/// Returns the raw message bytes. This implements the legacy message format
-/// (prefix 0x80 for v0 would be used for versioned transactions, but for
-/// simplicity and compatibility we use legacy format here).
-pub fn serialize_legacy_message(
+/// Returns the raw message bytes. This implements the Versioned Message v0 format.
+pub fn serialize_v0_message(
     fee_payer: &Pubkey,
     instructions: &[Instruction],
     blockhash: &str,
@@ -971,15 +1093,45 @@ pub fn serialize_legacy_message(
     });
     accounts_map.insert(0, fee_payer_entry);
 
-    let num_required_signatures = accounts_map.iter().filter(|(_, s, _)| *s).count() as u8;
-    let num_readonly_signed = accounts_map
+    if accounts_map.len() > 255 {
+        return Err(format!(
+            "too many accounts for v0 message: {} (max 255)",
+            accounts_map.len()
+        ));
+    }
+
+    let num_required_signatures_count = accounts_map.iter().filter(|(_, s, _)| *s).count();
+    if num_required_signatures_count > 255 {
+        return Err(format!(
+            "too many signers: {} (max 255)",
+            num_required_signatures_count
+        ));
+    }
+    let num_required_signatures = num_required_signatures_count as u8;
+
+    let num_readonly_signed_count = accounts_map
         .iter()
         .filter(|(_, s, w)| *s && !*w)
-        .count() as u8;
-    let num_readonly_unsigned = accounts_map
+        .count();
+    if num_readonly_signed_count > 255 {
+        return Err(format!(
+            "too many readonly signers: {} (max 255)",
+            num_readonly_signed_count
+        ));
+    }
+    let num_readonly_signed = num_readonly_signed_count as u8;
+
+    let num_readonly_unsigned_count = accounts_map
         .iter()
         .filter(|(_, s, w)| !*s && !*w)
-        .count() as u8;
+        .count();
+    if num_readonly_unsigned_count > 255 {
+        return Err(format!(
+            "too many readonly unsigned accounts: {} (max 255)",
+            num_readonly_unsigned_count
+        ));
+    }
+    let num_readonly_unsigned = num_readonly_unsigned_count as u8;
 
     let blockhash_bytes = bs58::decode(blockhash)
         .into_vec()
@@ -991,8 +1143,11 @@ pub fn serialize_legacy_message(
         ));
     }
 
-    // Serialize message
+    // Serialize message v0
     let mut msg = Vec::new();
+
+    // Version prefix: 0x80 (128) indicates Versioned Message v0
+    msg.push(0x80);
 
     // Header
     msg.push(num_required_signatures);
@@ -1016,6 +1171,9 @@ pub fn serialize_legacy_message(
             .iter()
             .position(|(p, _, _)| p == &ix.program_id)
             .ok_or("program ID not found in accounts list")?;
+        if prog_idx > 255 {
+            return Err(format!("program ID index overflow: {prog_idx} (max 255)"));
+        }
         msg.push(prog_idx as u8);
 
         // Account indices
@@ -1025,6 +1183,9 @@ pub fn serialize_legacy_message(
                 .iter()
                 .position(|(p, _, _)| p == pk)
                 .ok_or("account not found in accounts list")?;
+            if idx > 255 {
+                return Err(format!("account index overflow: {idx} (max 255)"));
+            }
             msg.push(idx as u8);
         }
 
@@ -1032,6 +1193,9 @@ pub fn serialize_legacy_message(
         write_compact_u16(&mut msg, ix.data.len() as u16);
         msg.extend_from_slice(&ix.data);
     }
+
+    // Address table lookups: 0 (compact-u16)
+    write_compact_u16(&mut msg, 0);
 
     Ok(msg)
 }
@@ -1128,7 +1292,7 @@ pub fn build_create_ata_ix(
             (system_program, false, false), // System Program
             (token_program, false, false),  // Token Program
         ],
-        data: vec![], // CreateAssociatedTokenAccount instruction has no data
+        data: vec![1], // CreateIdempotent instruction (index 1) for on-chain race condition defense
     }
 }
 
@@ -1214,6 +1378,62 @@ mod tests {
         let decoded = base64_decode(&encoded).unwrap();
         assert_eq!(decoded, data);
     }
+
+    #[test]
+    fn serialize_v0_message_structure() {
+        let payer = Pubkey::from_bytes([1u8; 32]);
+        let to = Pubkey::from_bytes([2u8; 32]);
+        let ix = build_system_transfer_ix(&payer, &to, 1000);
+        let blockhash = "GHtXQBpokMJhbUyHQDiKvJvPchsb4xRuvfFwkdSEiMPQ";
+        
+        let msg = serialize_v0_message(&payer, &[ix], blockhash).unwrap();
+        
+        // Byte 0 must be 0x80 (prefix for v0 message format)
+        assert_eq!(msg[0], 0x80);
+        
+        // Header starts at byte 1:
+        // num_required_signatures = 1
+        assert_eq!(msg[1], 1);
+        // num_readonly_signed = 0
+        assert_eq!(msg[2], 0);
+        // num_readonly_unsigned = 1 (System Program ID is readonly and unsigned)
+        assert_eq!(msg[3], 1);
+    }
+
+    #[test]
+    fn overflow_accounts_fails_closed() {
+        let payer = Pubkey::from_bytes([1u8; 32]);
+        let mut accounts = Vec::new();
+        // Add 260 unique accounts to force accounts_map > 255
+        for i in 0..260u16 {
+            let mut b = [0u8; 32];
+            let bytes = i.to_le_bytes();
+            b[0] = bytes[0];
+            b[1] = bytes[1];
+            accounts.push((Pubkey::from_bytes(b), false, true));
+        }
+        let ix = Instruction {
+            program_id: Pubkey::from_bytes([99u8; 32]),
+            accounts,
+            data: vec![],
+        };
+        let blockhash = "GHtXQBpokMJhbUyHQDiKvJvPchsb4xRuvfFwkdSEiMPQ";
+        let res = serialize_v0_message(&payer, &[ix], blockhash);
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("too many accounts"));
+    }
+
+    #[test]
+    fn create_ata_idempotent_structure() {
+        let funder = Pubkey::from_bytes([1u8; 32]);
+        let wallet = Pubkey::from_bytes([2u8; 32]);
+        let mint = Pubkey::from_bytes([3u8; 32]);
+        let ata = Pubkey::from_bytes([4u8; 32]);
+
+        let ix = build_create_ata_ix(&funder, &wallet, &mint, &ata);
+        assert_eq!(ix.data, vec![1]); // 1 byte CreateIdempotent instruction
+        assert_eq!(ix.accounts.len(), 6);
+    }
 }
 
 ```
@@ -1229,8 +1449,6 @@ license = "MIT"
 description = "ZeroClaw WIT plugin: assess SPL/Token-2022 mint security risk (T0 read-only). Returns RAG status with findings."
 publish = false
 
-# cdylib for the wasm component; rlib so the pure analysis core is testable
-# on the host with a plain `cargo test`.
 [lib]
 crate-type = ["cdylib", "rlib"]
 
@@ -1241,13 +1459,15 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 base64 = "0.22"
 
+[target.'cfg(target_family = "wasm")'.dependencies]
+waki = "0.4"
+
 [profile.release]
 opt-level = "s"
 lto = true
 strip = true
 codegen-units = 1
 
-# Standalone crate: built for wasm32-wasip2, not part of the host workspace.
 [workspace]
 
 ```
@@ -1346,7 +1566,8 @@ mod component {
     use solana_lite::rpc::{AccountInfo, SolanaRpc};
 
     struct WakiRpc {
-        _base_url: String,
+        base_url: String,
+        api_key: Option<String>,
     }
 
     impl WakiRpc {
@@ -1374,11 +1595,27 @@ mod component {
                 .ok_or_else(|| "RPC response missing 'result' field".to_string())
         }
 
-        fn http_post(&self, _body: &[u8]) -> Result<Vec<u8>, String> {
-            // Minimal wasi:http POST using the generated bindings
-            // This is a placeholder — in actual deployment, use waki or
-            // direct wasi:http/outgoing-handler calls
-            Err("HTTP not available in this build".to_string())
+        fn http_post(&self, body: &[u8]) -> Result<Vec<u8>, String> {
+            let client = waki::Client::new();
+            let mut req = client.post(&self.base_url)
+                .header("Content-Type", "application/json");
+
+            if let Some(key) = &self.api_key {
+                req = req.header("Authorization", &format!("Bearer {key}"));
+            }
+
+            let response = req
+                .body(body.to_vec())
+                .send()
+                .map_err(|e| format!("HTTP post failed to send: {e}"))?;
+
+            let status = response.status_code();
+            if status >= 400 {
+                return Err(format!("RPC HTTP status error: {status}"));
+            }
+
+            response.body()
+                .map_err(|e| format!("failed to read HTTP body: {e}"))
         }
     }
 
@@ -1386,52 +1623,17 @@ mod component {
         fn get_account_info(&self, pubkey: &str) -> Result<Option<AccountInfo>, String> {
             let params = serde_json::json!([pubkey, {"encoding": "base64"}]);
             let result = self.rpc_call("getAccountInfo", params)?;
-
-            let value = result.get("value");
-            match value {
-                None | Some(serde_json::Value::Null) => Ok(None),
-                Some(val) => {
-                    let data_arr = val.get("data")
-                        .and_then(|d| d.as_array())
-                        .ok_or("missing data array in account info")?;
-                    let data_base64 = data_arr.first()
-                        .and_then(|v| v.as_str())
-                        .ok_or("missing base64 data")?
-                        .to_string();
-                    let owner = val.get("owner")
-                        .and_then(|v| v.as_str())
-                        .ok_or("missing owner")?
-                        .to_string();
-                    let lamports = val.get("lamports")
-                        .and_then(|v| v.as_u64())
-                        .ok_or("missing lamports")?;
-                    let executable = val.get("executable")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false);
-
-                    Ok(Some(AccountInfo {
-                        data_base64,
-                        owner,
-                        lamports,
-                        executable,
-                    }))
-                }
-            }
+            solana_lite::rpc::parse_get_account_info_response(&result)
         }
 
         fn get_latest_blockhash(&self) -> Result<String, String> {
             let result = self.rpc_call("getLatestBlockhash", serde_json::json!([]))?;
-            result.get("value")
-                .and_then(|v| v.get("blockhash"))
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
-                .ok_or_else(|| "failed to parse blockhash from response".to_string())
+            solana_lite::rpc::parse_get_latest_blockhash_response(&result)
         }
 
         fn get_minimum_balance_for_rent_exemption(&self, size: u64) -> Result<u64, String> {
             let result = self.rpc_call("getMinimumBalanceForRentExemption", serde_json::json!([size]))?;
-            result.as_u64()
-                .ok_or_else(|| "failed to parse rent exemption amount".to_string())
+            solana_lite::rpc::parse_get_minimum_balance_for_rent_exemption_response(&result)
         }
     }
 
@@ -1502,21 +1704,29 @@ mod component {
                 }
             };
 
-            // Read RPC URL from host config
-            let rpc_url = match crate::component::zeroclaw::plugin::logging::log_record {
-                // Config is not directly available via logging import in tool-plugin world.
-                // The host injects config via __config in args (same as redact-text pattern).
-                _ => {
-                    // Try to get RPC URL from __config in args
-                    parsed.get("__config")
-                        .and_then(|c| c.get("solana_rpc_url"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("https://api.mainnet-beta.solana.com")
-                        .to_string()
+            // Read RPC config from __config (host injects this)
+            let config = parsed.get("__config");
+            let rpc_url = match config
+                .and_then(|c| c.get("solana_rpc_url"))
+                .and_then(|v| v.as_str())
+            {
+                Some(url) => url.to_string(),
+                None => {
+                    emit(PluginAction::Fail, PluginOutcome::Failure, "missing solana_rpc_url config", None);
+                    return Ok(ToolResult {
+                        success: false,
+                        output: String::new(),
+                        error: Some("Configuration 'solana_rpc_url' is required but not provided in __config.".to_string()),
+                    });
                 }
             };
 
-            let rpc = WakiRpc { _base_url: rpc_url };
+            let api_key = config
+                .and_then(|c| c.get("solana_rpc_api_key").or_else(|| c.get("api_key")))
+                .and_then(|v| v.as_str())
+                .map(String::from);
+
+            let rpc = WakiRpc { base_url: rpc_url, api_key };
 
             match check_token(&rpc, mint_address) {
                 Ok(report) => {
@@ -2030,22 +2240,20 @@ impl MockRpc {
 }
 
 impl SolanaRpc for MockRpc {
-    fn get_account_info(&self, _pubkey: &str) -> Result<Option<AccountInfo>, String> {
+    fn get_account_info(&self, pubkey: &str) -> Result<Option<AccountInfo>, String> {
         match &self.mode {
             MockMode::Fixture(accounts) => {
                 let fixture_val = accounts.get("__fixture__").unwrap();
                 let fixture: FixtureFile = serde_json::from_value(fixture_val.clone())
                     .map_err(|e| format!("fixture parse error: {e}"))?;
-                // Return first matching account or the first one
-                if let Some(acct) = fixture.accounts.values().next() {
-                    Ok(Some(AccountInfo {
+                match fixture.accounts.get(pubkey) {
+                    Some(acct) => Ok(Some(AccountInfo {
                         data_base64: acct.data_base64.clone(),
                         owner: acct.owner.clone(),
                         lamports: acct.lamports,
                         executable: acct.executable,
-                    }))
-                } else {
-                    Ok(None)
+                    })),
+                    None => Ok(None),
                 }
             }
             MockMode::PanicsIfCalled => {
@@ -2083,6 +2291,66 @@ impl SolanaRpc for MockRpc {
 
 ```
 
+## File: `plugins/token-risk-check/tests/fixtures/mint_clean_green.json`
+
+```json
+{
+  "accounts": {
+    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
+      "data_base64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMqaOwAAAAAJAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+      "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "lamports": 1000000,
+      "executable": false
+    }
+  }
+}
+```
+
+## File: `plugins/token-risk-check/tests/fixtures/mint_freeze_active.json`
+
+```json
+{
+  "accounts": {
+    "So11111111111111111111111111111111111111112": {
+      "data_base64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMqaOwAAAAAJAQEAAAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg==",
+      "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "lamports": 1000000,
+      "executable": false
+    }
+  }
+}
+```
+
+## File: `plugins/token-risk-check/tests/fixtures/mint_permanent_delegate.json`
+
+```json
+{
+  "accounts": {
+    "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263": {
+      "data_base64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMqaOwAAAAAJAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwAIAADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw==",
+      "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "lamports": 1000000,
+      "executable": false
+    }
+  }
+}
+```
+
+## File: `plugins/token-risk-check/tests/fixtures/mint_token2022_transferfee.json`
+
+```json
+{
+  "accounts": {
+    "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo": {
+      "data_base64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMqaOwAAAAAJAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEATAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQJwAAAAAAAPQB",
+      "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "lamports": 1000000,
+      "executable": false
+    }
+  }
+}
+```
+
 ## File: `plugins/spl-transfer-build/Cargo.toml`
 
 ```toml
@@ -2105,6 +2373,9 @@ wit-bindgen = "0.46"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 base64 = "0.22"
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+waki = "0.4"
 
 [profile.release]
 opt-level = "s"
@@ -2211,7 +2482,8 @@ mod component {
     use solana_lite::rpc::{AccountInfo, SolanaRpc};
 
     struct WakiRpc {
-        _base_url: String,
+        base_url: String,
+        api_key: Option<String>,
     }
 
     impl WakiRpc {
@@ -2239,8 +2511,27 @@ mod component {
                 .ok_or_else(|| "RPC response missing 'result' field".to_string())
         }
 
-        fn http_post(&self, _body: &[u8]) -> Result<Vec<u8>, String> {
-            Err("HTTP not available in this build".to_string())
+        fn http_post(&self, body: &[u8]) -> Result<Vec<u8>, String> {
+            let client = waki::Client::new();
+            let mut req = client.post(&self.base_url)
+                .header("Content-Type", "application/json");
+
+            if let Some(key) = &self.api_key {
+                req = req.header("Authorization", &format!("Bearer {key}"));
+            }
+
+            let response = req
+                .body(body.to_vec())
+                .send()
+                .map_err(|e| format!("HTTP post failed to send: {e}"))?;
+
+            let status = response.status_code();
+            if status >= 400 {
+                return Err(format!("RPC HTTP status error: {status}"));
+            }
+
+            response.body()
+                .map_err(|e| format!("failed to read HTTP body: {e}"))
         }
     }
 
@@ -2248,47 +2539,17 @@ mod component {
         fn get_account_info(&self, pubkey: &str) -> Result<Option<AccountInfo>, String> {
             let params = serde_json::json!([pubkey, {"encoding": "base64"}]);
             let result = self.rpc_call("getAccountInfo", params)?;
-
-            let value = result.get("value");
-            match value {
-                None | Some(serde_json::Value::Null) => Ok(None),
-                Some(val) => {
-                    let data_arr = val.get("data")
-                        .and_then(|d| d.as_array())
-                        .ok_or("missing data array")?;
-                    let data_base64 = data_arr.first()
-                        .and_then(|v| v.as_str())
-                        .ok_or("missing base64 data")?
-                        .to_string();
-                    let owner = val.get("owner")
-                        .and_then(|v| v.as_str())
-                        .ok_or("missing owner")?
-                        .to_string();
-                    let lamports = val.get("lamports")
-                        .and_then(|v| v.as_u64())
-                        .ok_or("missing lamports")?;
-                    let executable = val.get("executable")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false);
-
-                    Ok(Some(AccountInfo { data_base64, owner, lamports, executable }))
-                }
-            }
+            solana_lite::rpc::parse_get_account_info_response(&result)
         }
 
         fn get_latest_blockhash(&self) -> Result<String, String> {
             let result = self.rpc_call("getLatestBlockhash", serde_json::json!([]))?;
-            result.get("value")
-                .and_then(|v| v.get("blockhash"))
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
-                .ok_or_else(|| "failed to parse blockhash".to_string())
+            solana_lite::rpc::parse_get_latest_blockhash_response(&result)
         }
 
         fn get_minimum_balance_for_rent_exemption(&self, size: u64) -> Result<u64, String> {
             let result = self.rpc_call("getMinimumBalanceForRentExemption", serde_json::json!([size]))?;
-            result.as_u64()
-                .ok_or_else(|| "failed to parse rent amount".to_string())
+            solana_lite::rpc::parse_get_minimum_balance_for_rent_exemption_response(&result)
         }
     }
 
@@ -2362,12 +2623,29 @@ mod component {
                 }
             };
 
-            let rpc_url = serde_json::from_str::<serde_json::Value>(&args)
-                .ok()
-                .and_then(|v| v.get("__config")?.get("solana_rpc_url")?.as_str().map(String::from))
-                .unwrap_or_else(|| "https://api.mainnet-beta.solana.com".to_string());
+            let parsed_args = serde_json::from_str::<serde_json::Value>(&args).unwrap_or(serde_json::Value::Null);
+            let config = parsed_args.get("__config");
+            let rpc_url = match config
+                .and_then(|c| c.get("solana_rpc_url"))
+                .and_then(|v| v.as_str())
+            {
+                Some(url) => url.to_string(),
+                None => {
+                    emit(PluginAction::Fail, PluginOutcome::Failure, "missing solana_rpc_url config");
+                    return Ok(ToolResult {
+                        success: false,
+                        output: String::new(),
+                        error: Some("Configuration 'solana_rpc_url' is required but not provided in __config.".to_string()),
+                    });
+                }
+            };
 
-            let rpc = WakiRpc { _base_url: rpc_url };
+            let api_key = config
+                .and_then(|c| c.get("solana_rpc_api_key").or_else(|| c.get("api_key")))
+                .and_then(|v| v.as_str())
+                .map(String::from);
+
+            let rpc = WakiRpc { base_url: rpc_url, api_key };
 
             match build_unsigned_tx(&rpc, &req) {
                 Ok(result) => {
@@ -2490,7 +2768,7 @@ use solana_lite::{
     rpc::SolanaRpc,
     wire::{
         base64_encode, build_memo_ix, build_system_transfer_ix,
-        derive_ata, build_create_ata_ix, build_spl_transfer_ix, serialize_legacy_message,
+        derive_ata, build_create_ata_ix, build_spl_transfer_ix, serialize_v0_message,
         wrap_unsigned_transaction, Instruction,
     },
 };
@@ -2554,7 +2832,7 @@ pub fn build_unsigned_tx(rpc: &dyn SolanaRpc, req: &TransferRequest) -> Result<B
     let blockhash = rpc.get_latest_blockhash()?;
 
     // 7. Serialize message
-    let message_bytes = serialize_legacy_message(&from, &instructions, &blockhash)?;
+    let message_bytes = serialize_v0_message(&from, &instructions, &blockhash)?;
 
     // 8. Wrap as unsigned transaction
     let tx_bytes = wrap_unsigned_transaction(&message_bytes, 1);

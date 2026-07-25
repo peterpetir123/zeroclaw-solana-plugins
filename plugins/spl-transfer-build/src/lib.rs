@@ -42,7 +42,8 @@ mod component {
     use solana_lite::rpc::{AccountInfo, SolanaRpc};
 
     struct WakiRpc {
-        _base_url: String,
+        base_url: String,
+        api_key: Option<String>,
     }
 
     impl WakiRpc {
@@ -70,8 +71,27 @@ mod component {
                 .ok_or_else(|| "RPC response missing 'result' field".to_string())
         }
 
-        fn http_post(&self, _body: &[u8]) -> Result<Vec<u8>, String> {
-            Err("HTTP not available in this build".to_string())
+        fn http_post(&self, body: &[u8]) -> Result<Vec<u8>, String> {
+            let client = waki::Client::new();
+            let mut req = client.post(&self.base_url)
+                .header("Content-Type", "application/json");
+
+            if let Some(key) = &self.api_key {
+                req = req.header("Authorization", &format!("Bearer {key}"));
+            }
+
+            let response = req
+                .body(body.to_vec())
+                .send()
+                .map_err(|e| format!("HTTP post failed to send: {e}"))?;
+
+            let status = response.status_code();
+            if status >= 400 {
+                return Err(format!("RPC HTTP status error: {status}"));
+            }
+
+            response.body()
+                .map_err(|e| format!("failed to read HTTP body: {e}"))
         }
     }
 
@@ -79,47 +99,17 @@ mod component {
         fn get_account_info(&self, pubkey: &str) -> Result<Option<AccountInfo>, String> {
             let params = serde_json::json!([pubkey, {"encoding": "base64"}]);
             let result = self.rpc_call("getAccountInfo", params)?;
-
-            let value = result.get("value");
-            match value {
-                None | Some(serde_json::Value::Null) => Ok(None),
-                Some(val) => {
-                    let data_arr = val.get("data")
-                        .and_then(|d| d.as_array())
-                        .ok_or("missing data array")?;
-                    let data_base64 = data_arr.first()
-                        .and_then(|v| v.as_str())
-                        .ok_or("missing base64 data")?
-                        .to_string();
-                    let owner = val.get("owner")
-                        .and_then(|v| v.as_str())
-                        .ok_or("missing owner")?
-                        .to_string();
-                    let lamports = val.get("lamports")
-                        .and_then(|v| v.as_u64())
-                        .ok_or("missing lamports")?;
-                    let executable = val.get("executable")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false);
-
-                    Ok(Some(AccountInfo { data_base64, owner, lamports, executable }))
-                }
-            }
+            solana_lite::rpc::parse_get_account_info_response(&result)
         }
 
         fn get_latest_blockhash(&self) -> Result<String, String> {
             let result = self.rpc_call("getLatestBlockhash", serde_json::json!([]))?;
-            result.get("value")
-                .and_then(|v| v.get("blockhash"))
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
-                .ok_or_else(|| "failed to parse blockhash".to_string())
+            solana_lite::rpc::parse_get_latest_blockhash_response(&result)
         }
 
         fn get_minimum_balance_for_rent_exemption(&self, size: u64) -> Result<u64, String> {
             let result = self.rpc_call("getMinimumBalanceForRentExemption", serde_json::json!([size]))?;
-            result.as_u64()
-                .ok_or_else(|| "failed to parse rent amount".to_string())
+            solana_lite::rpc::parse_get_minimum_balance_for_rent_exemption_response(&result)
         }
     }
 
@@ -193,12 +183,29 @@ mod component {
                 }
             };
 
-            let rpc_url = serde_json::from_str::<serde_json::Value>(&args)
-                .ok()
-                .and_then(|v| v.get("__config")?.get("solana_rpc_url")?.as_str().map(String::from))
-                .unwrap_or_else(|| "https://api.mainnet-beta.solana.com".to_string());
+            let parsed_args = serde_json::from_str::<serde_json::Value>(&args).unwrap_or(serde_json::Value::Null);
+            let config = parsed_args.get("__config");
+            let rpc_url = match config
+                .and_then(|c| c.get("solana_rpc_url"))
+                .and_then(|v| v.as_str())
+            {
+                Some(url) => url.to_string(),
+                None => {
+                    emit(PluginAction::Fail, PluginOutcome::Failure, "missing solana_rpc_url config");
+                    return Ok(ToolResult {
+                        success: false,
+                        output: String::new(),
+                        error: Some("Configuration 'solana_rpc_url' is required but not provided in __config.".to_string()),
+                    });
+                }
+            };
 
-            let rpc = WakiRpc { _base_url: rpc_url };
+            let api_key = config
+                .and_then(|c| c.get("solana_rpc_api_key").or_else(|| c.get("api_key")))
+                .and_then(|v| v.as_str())
+                .map(String::from);
+
+            let rpc = WakiRpc { base_url: rpc_url, api_key };
 
             match build_unsigned_tx(&rpc, &req) {
                 Ok(result) => {

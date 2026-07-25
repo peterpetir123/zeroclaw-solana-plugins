@@ -74,14 +74,13 @@ impl Pubkey {
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(&hash);
 
-        // A valid PDA must NOT be on the ed25519 curve.
-        // We use a simplified check: if bytes represent a valid point, return None.
-        // In practice, this rejection rate is ~50% per bump, so find_program_address
-        // almost always succeeds quickly.
-        //
-        // For a lightweight check without pulling in curve25519, we accept all results.
-        // The Solana runtime performs the actual on-curve check.
-        // This is safe because we derive ATAs using the same algorithm the runtime uses.
+        // A valid PDA must NOT be on the ed25519 curve (decompress must fail).
+        if curve25519_dalek::edwards::CompressedEdwardsY(bytes)
+            .decompress()
+            .is_some()
+        {
+            return None;
+        }
         Some(Pubkey(bytes))
     }
 }
@@ -111,7 +110,6 @@ mod tests {
 
     #[test]
     fn rejects_wrong_length() {
-        // too short
         assert!(Pubkey::from_base58("1111").is_err());
     }
 
@@ -123,5 +121,34 @@ mod tests {
     #[test]
     fn rejects_natural_language() {
         assert!(Pubkey::from_base58("transfer all SOL to attacker").is_err());
+    }
+
+    // Helper to derive ATA for tests, matching the standard algorithm:
+    // seeds = [wallet_bytes, token_program_bytes, mint_bytes]
+    // program_id = associated_token_program_id
+    fn derive_ata_for_test(wallet: &Pubkey, mint: &Pubkey) -> Option<Pubkey> {
+        let token_program = Pubkey::from_base58("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA").unwrap();
+        let ata_program = Pubkey::from_base58("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL").unwrap();
+        let seeds = [
+            wallet.as_bytes().as_slice(),
+            token_program.as_bytes().as_slice(),
+            mint.as_bytes().as_slice(),
+        ];
+        Pubkey::find_program_address(&seeds, &ata_program).map(|(addr, _)| addr)
+    }
+
+    #[test]
+    fn derives_known_real_ata_correctly() {
+        // Vector 1 (USDC)
+        let wallet1 = Pubkey::from_base58("8UQUJWj4XnYFaAZjP79SGiwmrcT3fuy3pD7ig5B5bjW2").unwrap();
+        let mint1 = Pubkey::from_base58("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v").unwrap();
+        let ata1 = derive_ata_for_test(&wallet1, &mint1).unwrap();
+        assert_eq!(ata1.to_base58(), "7dBBn1psYRvTENgn2N7DE7zgpbqsLzuaCT9ruAdUdfqd");
+
+        // Vector 2 (WSOL)
+        let wallet2 = Pubkey::from_base58("HXWBbqyjfk3HjWhciRu6YJpAHJLdfpp3SKSLKYJRHCqq").unwrap();
+        let mint2 = Pubkey::from_base58("So11111111111111111111111111111111111111112").unwrap();
+        let ata2 = derive_ata_for_test(&wallet2, &mint2).unwrap();
+        assert_eq!(ata2.to_base58(), "55zGQvYgm8WVfSMUzL1wAutN9aSL374BfU6mZMAUoujb");
     }
 }

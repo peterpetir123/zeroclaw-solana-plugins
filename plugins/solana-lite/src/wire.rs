@@ -36,10 +36,8 @@ pub fn write_compact_u16(buf: &mut Vec<u8>, mut n: u16) {
 /// Serialize a Solana Message v0 (versioned) from a fee payer, instructions,
 /// and a recent blockhash.
 ///
-/// Returns the raw message bytes. This implements the legacy message format
-/// (prefix 0x80 for v0 would be used for versioned transactions, but for
-/// simplicity and compatibility we use legacy format here).
-pub fn serialize_legacy_message(
+/// Returns the raw message bytes. This implements the Versioned Message v0 format.
+pub fn serialize_v0_message(
     fee_payer: &Pubkey,
     instructions: &[Instruction],
     blockhash: &str,
@@ -81,15 +79,45 @@ pub fn serialize_legacy_message(
     });
     accounts_map.insert(0, fee_payer_entry);
 
-    let num_required_signatures = accounts_map.iter().filter(|(_, s, _)| *s).count() as u8;
-    let num_readonly_signed = accounts_map
+    if accounts_map.len() > 255 {
+        return Err(format!(
+            "too many accounts for v0 message: {} (max 255)",
+            accounts_map.len()
+        ));
+    }
+
+    let num_required_signatures_count = accounts_map.iter().filter(|(_, s, _)| *s).count();
+    if num_required_signatures_count > 255 {
+        return Err(format!(
+            "too many signers: {} (max 255)",
+            num_required_signatures_count
+        ));
+    }
+    let num_required_signatures = num_required_signatures_count as u8;
+
+    let num_readonly_signed_count = accounts_map
         .iter()
         .filter(|(_, s, w)| *s && !*w)
-        .count() as u8;
-    let num_readonly_unsigned = accounts_map
+        .count();
+    if num_readonly_signed_count > 255 {
+        return Err(format!(
+            "too many readonly signers: {} (max 255)",
+            num_readonly_signed_count
+        ));
+    }
+    let num_readonly_signed = num_readonly_signed_count as u8;
+
+    let num_readonly_unsigned_count = accounts_map
         .iter()
         .filter(|(_, s, w)| !*s && !*w)
-        .count() as u8;
+        .count();
+    if num_readonly_unsigned_count > 255 {
+        return Err(format!(
+            "too many readonly unsigned accounts: {} (max 255)",
+            num_readonly_unsigned_count
+        ));
+    }
+    let num_readonly_unsigned = num_readonly_unsigned_count as u8;
 
     let blockhash_bytes = bs58::decode(blockhash)
         .into_vec()
@@ -101,8 +129,11 @@ pub fn serialize_legacy_message(
         ));
     }
 
-    // Serialize message
+    // Serialize message v0
     let mut msg = Vec::new();
+
+    // Version prefix: 0x80 (128) indicates Versioned Message v0
+    msg.push(0x80);
 
     // Header
     msg.push(num_required_signatures);
@@ -126,6 +157,9 @@ pub fn serialize_legacy_message(
             .iter()
             .position(|(p, _, _)| p == &ix.program_id)
             .ok_or("program ID not found in accounts list")?;
+        if prog_idx > 255 {
+            return Err(format!("program ID index overflow: {prog_idx} (max 255)"));
+        }
         msg.push(prog_idx as u8);
 
         // Account indices
@@ -135,6 +169,9 @@ pub fn serialize_legacy_message(
                 .iter()
                 .position(|(p, _, _)| p == pk)
                 .ok_or("account not found in accounts list")?;
+            if idx > 255 {
+                return Err(format!("account index overflow: {idx} (max 255)"));
+            }
             msg.push(idx as u8);
         }
 
@@ -142,6 +179,9 @@ pub fn serialize_legacy_message(
         write_compact_u16(&mut msg, ix.data.len() as u16);
         msg.extend_from_slice(&ix.data);
     }
+
+    // Address table lookups: 0 (compact-u16)
+    write_compact_u16(&mut msg, 0);
 
     Ok(msg)
 }
@@ -238,7 +278,7 @@ pub fn build_create_ata_ix(
             (system_program, false, false), // System Program
             (token_program, false, false),  // Token Program
         ],
-        data: vec![], // CreateAssociatedTokenAccount instruction has no data
+        data: vec![1], // CreateIdempotent instruction (index 1) for on-chain race condition defense
     }
 }
 
@@ -323,5 +363,61 @@ mod tests {
         let encoded = base64_encode(data);
         let decoded = base64_decode(&encoded).unwrap();
         assert_eq!(decoded, data);
+    }
+
+    #[test]
+    fn serialize_v0_message_structure() {
+        let payer = Pubkey::from_bytes([1u8; 32]);
+        let to = Pubkey::from_bytes([2u8; 32]);
+        let ix = build_system_transfer_ix(&payer, &to, 1000);
+        let blockhash = "GHtXQBpokMJhbUyHQDiKvJvPchsb4xRuvfFwkdSEiMPQ";
+        
+        let msg = serialize_v0_message(&payer, &[ix], blockhash).unwrap();
+        
+        // Byte 0 must be 0x80 (prefix for v0 message format)
+        assert_eq!(msg[0], 0x80);
+        
+        // Header starts at byte 1:
+        // num_required_signatures = 1
+        assert_eq!(msg[1], 1);
+        // num_readonly_signed = 0
+        assert_eq!(msg[2], 0);
+        // num_readonly_unsigned = 1 (System Program ID is readonly and unsigned)
+        assert_eq!(msg[3], 1);
+    }
+
+    #[test]
+    fn overflow_accounts_fails_closed() {
+        let payer = Pubkey::from_bytes([1u8; 32]);
+        let mut accounts = Vec::new();
+        // Add 260 unique accounts to force accounts_map > 255
+        for i in 0..260u16 {
+            let mut b = [0u8; 32];
+            let bytes = i.to_le_bytes();
+            b[0] = bytes[0];
+            b[1] = bytes[1];
+            accounts.push((Pubkey::from_bytes(b), false, true));
+        }
+        let ix = Instruction {
+            program_id: Pubkey::from_bytes([99u8; 32]),
+            accounts,
+            data: vec![],
+        };
+        let blockhash = "GHtXQBpokMJhbUyHQDiKvJvPchsb4xRuvfFwkdSEiMPQ";
+        let res = serialize_v0_message(&payer, &[ix], blockhash);
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("too many accounts"));
+    }
+
+    #[test]
+    fn create_ata_idempotent_structure() {
+        let funder = Pubkey::from_bytes([1u8; 32]);
+        let wallet = Pubkey::from_bytes([2u8; 32]);
+        let mint = Pubkey::from_bytes([3u8; 32]);
+        let ata = Pubkey::from_bytes([4u8; 32]);
+
+        let ix = build_create_ata_ix(&funder, &wallet, &mint, &ata);
+        assert_eq!(ix.data, vec![1]); // 1 byte CreateIdempotent instruction
+        assert_eq!(ix.accounts.len(), 6);
     }
 }

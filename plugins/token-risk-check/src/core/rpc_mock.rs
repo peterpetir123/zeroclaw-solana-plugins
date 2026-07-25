@@ -70,22 +70,20 @@ impl MockRpc {
 }
 
 impl SolanaRpc for MockRpc {
-    fn get_account_info(&self, _pubkey: &str) -> Result<Option<AccountInfo>, String> {
+    fn get_account_info(&self, pubkey: &str) -> Result<Option<AccountInfo>, String> {
         match &self.mode {
             MockMode::Fixture(accounts) => {
                 let fixture_val = accounts.get("__fixture__").unwrap();
                 let fixture: FixtureFile = serde_json::from_value(fixture_val.clone())
                     .map_err(|e| format!("fixture parse error: {e}"))?;
-                // Return first matching account or the first one
-                if let Some(acct) = fixture.accounts.values().next() {
-                    Ok(Some(AccountInfo {
+                match fixture.accounts.get(pubkey) {
+                    Some(acct) => Ok(Some(AccountInfo {
                         data_base64: acct.data_base64.clone(),
                         owner: acct.owner.clone(),
                         lamports: acct.lamports,
                         executable: acct.executable,
-                    }))
-                } else {
-                    Ok(None)
+                    })),
+                    None => Ok(None),
                 }
             }
             MockMode::PanicsIfCalled => {

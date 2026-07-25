@@ -14,7 +14,7 @@ use solana_lite::{
     rpc::SolanaRpc,
     wire::{
         base64_encode, build_memo_ix, build_system_transfer_ix,
-        derive_ata, build_create_ata_ix, build_spl_transfer_ix, serialize_legacy_message,
+        derive_ata, build_create_ata_ix, build_spl_transfer_ix, serialize_v0_message,
         wrap_unsigned_transaction, Instruction,
     },
 };
@@ -78,7 +78,7 @@ pub fn build_unsigned_tx(rpc: &dyn SolanaRpc, req: &TransferRequest) -> Result<B
     let blockhash = rpc.get_latest_blockhash()?;
 
     // 7. Serialize message
-    let message_bytes = serialize_legacy_message(&from, &instructions, &blockhash)?;
+    let message_bytes = serialize_v0_message(&from, &instructions, &blockhash)?;
 
     // 8. Wrap as unsigned transaction
     let tx_bytes = wrap_unsigned_transaction(&message_bytes, 1);
