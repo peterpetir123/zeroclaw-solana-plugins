@@ -14,10 +14,11 @@ The **ZeroClaw Solana Plugin Suite** equips autonomous AI agents with two essent
 ### 2. Who It's For
 Designed for **autonomous agent operators, DeFi trading bots, and AI assistant channels (Telegram, Discord, Terminal)** operating on Solana. It enables AI agents to query token risks and assemble transactions without ever holding or touching private key custody.
 
-### 3. ZeroClaw Features Used
+### 3. ZeroClaw Features & Skill Integration
 - **WIT v0 Component Model (`wasm32-wasip2`)**: Exposes native `wit/v0` tool execution interfaces.
 - **WASI HTTP Client (`waki`)**: Performs outbound JSON-RPC queries directly through WASI network interfaces.
-- **Runtime Capability & Config Ingestion (`__config`)**: Consumes host-injected `solana_rpc_url` and `solana_rpc_api_key` under strict permissions (`http_client`, `config_read`).
+- **Skill Registration (`zeroclaw skills install`)**: Fully compatible with ZeroClaw CLI skill/plugin loader.
+- **Runtime Capability & Config Ingestion (`__config`)**: Consumes host-injected `SOLANA_RPC_URL` under strict permissions (`http_client`, `config_read`).
 
 ### 4. What We Had to Build (`solana-lite`)
 Standard Solana SDKs (`solana-sdk`, `solana-client`) fail to compile on `wasm32-wasip2` due to heavy OS-level dependencies (`tokio`, `sysinfo`, `net`). We built **`solana-lite`**, a custom lightweight Rust library:
@@ -32,39 +33,71 @@ Standard Solana SDKs (`solana-sdk`, `solana-client`) fail to compile on `wasm32-
 | `token-risk-check` | **T0** (Read-Only) | **Zero Custody**. Read-only RPC calls. Input sanitization prevents prompt injection; invalid mint addresses fail closed immediately. |
 | `spl-transfer-build` | **T1** (Unsigned Build) | **Zero Custody**. Constructs *unsigned* Base64 transactions. Does not store or accept private keys. Prevents relative amount exploits ("all", "max") by failing closed on non-numeric inputs. |
 
-### 6. Reproduction Guide for Operators & Judges
+---
 
-Operators and judges can verify each plugin individually using standard Rust / Cargo tools:
+## 🚀 Execution & Verification Guide for Operators & Judges
 
-#### Step 1: Clone Repository
+### Step 1: Set Solana RPC URL (Optional)
+By default, execution targets Solana Mainnet (`https://api.mainnet-beta.solana.com`). You can set a custom RPC via environment variable:
 ```bash
-git clone https://github.com/peterpetir123/zeroclaw-solana-plugins.git
-cd zeroclaw-solana-plugins
+export SOLANA_RPC_URL="https://api.mainnet-beta.solana.com"
 ```
 
-#### Step 2: Run Unit Tests for Each Plugin Individually
-* **1. `solana-lite` (Shared Cryptography & V0 Serializer - 29 tests):**
-  ```bash
-  cd plugins/solana-lite && cargo test && cd ../..
-  ```
-* **2. `token-risk-check` (T0 Security Auditor - 11 tests):**
-  ```bash
-  cd plugins/token-risk-check && cargo test && cd ../..
-  ```
-* **3. `spl-transfer-build` (T1 Unsigned Transaction Builder - 9 tests):**
-  ```bash
-  cd plugins/spl-transfer-build && cargo test && cd ../..
-  ```
+---
 
-#### Step 3: Build WebAssembly (`wasm32-wasip2`) Binaries
-* **Build `token-risk-check.wasm`:**
-  ```bash
-  cd plugins/token-risk-check && cargo build --target wasm32-wasip2 --release && cd ../..
-  ```
-* **Build `spl-transfer-build.wasm`:**
-  ```bash
-  cd plugins/spl-transfer-build && cargo build --target wasm32-wasip2 --release && cd ../..
-  ```
+### Step 2: Live Mainnet Functional Execution (Direct Host Binaries)
+
+#### 1. Live Token Risk Audit (`token-risk-check`):
+Audit any token mint directly on Solana Mainnet (e.g. USDC `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`):
+```bash
+cd plugins/token-risk-check
+cargo run --bin token-risk-check-cli EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
+```
+
+#### 2. Live Unsigned Transaction Construction (`spl-transfer-build`):
+Construct an unsigned Versioned V0 transaction directly using live Mainnet blockhashes and rent exemptions:
+```bash
+cd plugins/spl-transfer-build
+cargo run --bin spl-transfer-build-cli 8UQUJWj4XnYFaAZjP79SGiwmrcT3fuy3pD7ig5B5bjW2 EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v 1000000
+```
+
+---
+
+### Step 3: Run Unit Test Suite (49 Tests)
+Run all 49 failsafe security tests across the workspace:
+```bash
+# 1. solana-lite (29 tests)
+cd plugins/solana-lite && cargo test && cd ../..
+
+# 2. token-risk-check (11 tests)
+cd plugins/token-risk-check && cargo test && cd ../..
+
+# 3. spl-transfer-build (9 tests)
+cd plugins/spl-transfer-build && cargo test && cd ../..
+```
+
+---
+
+### Step 4: Build WebAssembly (`wasm32-wasip2`) Release Binaries
+Compile the WebAssembly components for production ZeroClaw runtime deployment:
+```bash
+cd plugins/token-risk-check && cargo build --target wasm32-wasip2 --release && cd ../..
+cd plugins/spl-transfer-build && cargo build --target wasm32-wasip2 --release && cd ../..
+```
+
+---
+
+### Step 5: Install Plugins into ZeroClaw CLI Runtime
+ZeroClaw CLI (v0.8.3+) uses `zeroclaw skills` subcommands to manage plugins and skills:
+
+```bash
+# Install both skills into ZeroClaw
+zeroclaw skills install ./plugins/token-risk-check
+zeroclaw skills install ./plugins/spl-transfer-build
+
+# Verify registered skills
+zeroclaw skills list
+```
 
 ---
 
@@ -81,6 +114,7 @@ cd zeroclaw-solana-plugins
 
 - **49 / 49 Unit Tests Passed (100% Pass Rate)**
 - Built & validated for target **`wasm32-wasip2`** without warnings.
+- Installed & audited under ZeroClaw CLI runtime.
 
 ## 📄 License
 
