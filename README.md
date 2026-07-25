@@ -37,9 +37,15 @@ Standard Solana SDKs (`solana-sdk`, `solana-client`) fail to compile on `wasm32-
 
 ## 🚀 Execution & Verification Guide for Operators & Judges
 
-### Step 1: Set Solana RPC URL (Optional)
+> [!NOTE]
+> Make sure you are inside the root directory of `zeroclaw-solana-plugins` repository before running the commands below.
+
+### Step 1: Clone Repository & Set Solana RPC URL (Optional)
 By default, execution targets Solana Mainnet (`https://api.mainnet-beta.solana.com`). You can set a custom RPC via environment variable:
 ```bash
+git clone https://github.com/peterpetir123/zeroclaw-solana-plugins.git
+cd zeroclaw-solana-plugins
+
 export SOLANA_RPC_URL="https://api.mainnet-beta.solana.com"
 ```
 
@@ -50,15 +56,13 @@ export SOLANA_RPC_URL="https://api.mainnet-beta.solana.com"
 #### 1. Live Token Risk Audit (`token-risk-check`):
 Audit any token mint directly on Solana Mainnet (e.g. USDC `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`):
 ```bash
-cd /home/hengkerprotzy/coding/zeroclaw-solana-plugins/plugins/token-risk-check
-cargo run --bin token-risk-check-cli EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
+(cd plugins/token-risk-check && cargo run --bin token-risk-check-cli EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v)
 ```
 
 #### 2. Live Unsigned Transaction Construction (`spl-transfer-build`):
 Construct an unsigned Versioned V0 transaction directly using live Mainnet blockhashes and rent exemptions:
 ```bash
-cd /home/hengkerprotzy/coding/zeroclaw-solana-plugins/plugins/spl-transfer-build
-cargo run --bin spl-transfer-build-cli 8UQUJWj4XnYFaAZjP79SGiwmrcT3fuy3pD7ig5B5bjW2 EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v 1000000
+(cd plugins/spl-transfer-build && cargo run --bin spl-transfer-build-cli 8UQUJWj4XnYFaAZjP79SGiwmrcT3fuy3pD7ig5B5bjW2 EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v 1000000)
 ```
 
 ---
@@ -67,13 +71,13 @@ cargo run --bin spl-transfer-build-cli 8UQUJWj4XnYFaAZjP79SGiwmrcT3fuy3pD7ig5B5b
 Run all 49 failsafe security tests across the workspace:
 ```bash
 # 1. solana-lite (29 tests)
-cd /home/hengkerprotzy/coding/zeroclaw-solana-plugins/plugins/solana-lite && cargo test
+(cd plugins/solana-lite && cargo test)
 
 # 2. token-risk-check (11 tests)
-cd /home/hengkerprotzy/coding/zeroclaw-solana-plugins/plugins/token-risk-check && cargo test
+(cd plugins/token-risk-check && cargo test)
 
 # 3. spl-transfer-build (9 tests)
-cd /home/hengkerprotzy/coding/zeroclaw-solana-plugins/plugins/spl-transfer-build && cargo test
+(cd plugins/spl-transfer-build && cargo test)
 ```
 
 ---
@@ -81,8 +85,8 @@ cd /home/hengkerprotzy/coding/zeroclaw-solana-plugins/plugins/spl-transfer-build
 ### Step 4: Build WebAssembly (`wasm32-wasip2`) Release Binaries
 Compile the WebAssembly components for production ZeroClaw runtime deployment:
 ```bash
-cd /home/hengkerprotzy/coding/zeroclaw-solana-plugins/plugins/token-risk-check && cargo build --target wasm32-wasip2 --release
-cd /home/hengkerprotzy/coding/zeroclaw-solana-plugins/plugins/spl-transfer-build && cargo build --target wasm32-wasip2 --release
+(cd plugins/token-risk-check && cargo build --target wasm32-wasip2 --release)
+(cd plugins/spl-transfer-build && cargo build --target wasm32-wasip2 --release)
 ```
 
 ---
@@ -92,8 +96,8 @@ ZeroClaw CLI (v0.8.3+) uses `zeroclaw skills` subcommands to manage plugins and 
 
 ```bash
 # Install both skills into ZeroClaw
-zeroclaw skills install /home/hengkerprotzy/coding/zeroclaw-solana-plugins/plugins/token-risk-check
-zeroclaw skills install /home/hengkerprotzy/coding/zeroclaw-solana-plugins/plugins/spl-transfer-build
+zeroclaw skills install ./plugins/token-risk-check
+zeroclaw skills install ./plugins/spl-transfer-build
 
 # Verify registered skills
 zeroclaw skills list
