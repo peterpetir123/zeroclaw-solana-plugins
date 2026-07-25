@@ -33,21 +33,18 @@ Standard Solana SDKs (`solana-sdk`, `solana-client`) fail to compile on `wasm32-
 | `spl-transfer-build` | **T1** (Unsigned Build) | **Zero Custody**. Constructs *unsigned* Base64 transactions. Does not store or accept private keys. Prevents relative amount exploits ("all", "max") by failing closed on non-numeric inputs. |
 
 ### 6. Reproduction Guide for Operators
-1. **Clone & Test**:
+1. **Clone Repo**:
    ```bash
    git clone https://github.com/peterpetir123/zeroclaw-solana-plugins.git
    cd zeroclaw-solana-plugins
-   ./demo_test.sh # Runs 49/49 native tests and compiles Wasm binaries
    ```
-2. **Install to ZeroClaw Runtime**:
-   Copy `.wasm` binaries alongside `manifest.toml` files in `~/.zeroclaw/plugins/`:
+2. **Run Comprehensive Test Suite (49/49 Unit Tests)**:
    ```bash
-   zeroclaw plugin install ~/.zeroclaw/plugins/token-risk-check
-   zeroclaw plugin install ~/.zeroclaw/plugins/spl-transfer-build
+   ./demo_test.sh
    ```
-3. **Configure RPC**:
+3. **Run Live Plugin Demonstration & JSON Outputs**:
    ```bash
-   zeroclaw config set solana_rpc_url "https://api.mainnet-beta.solana.com"
+   ./demo_live.sh
    ```
 
 ---
