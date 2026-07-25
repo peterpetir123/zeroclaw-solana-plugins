@@ -1,3 +1,12 @@
+[plugin]
+name = "token-risk-check"
+version = "0.1.0"
+description = "Assess SPL/Token-2022 mint security risk before transacting: mint/freeze authority, Token-2022 extensions, transfer hooks, permanent delegate. Read-only, zero custody."
+author = "peterpetir123"
+wasm_path = "token_risk_check.wasm"
+capabilities = ["tool"]
+permissions = ["http_client", "config_read"]
+
 [skill]
 name = "token-risk-check"
 version = "0.1.0"

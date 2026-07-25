@@ -3425,6 +3425,15 @@ Binary size: **~212 KB**.
 ## File: `plugins/spl-transfer-build/manifest.toml`
 
 ```toml
+[plugin]
+name = "spl-transfer-build"
+version = "0.1.0"
+description = "Build unsigned versioned Solana transactions (base64) for SOL/SPL token transfers. Auto-creates ATA, attaches memo. Never touches private keys."
+author = "peterpetir123"
+wasm_path = "spl_transfer_build.wasm"
+capabilities = ["tool"]
+permissions = ["http_client", "config_read"]
+
 [skill]
 name = "spl-transfer-build"
 version = "0.1.0"
@@ -5737,6 +5746,15 @@ Binary size: **~173 KB**.
 ## File: `plugins/token-risk-check/manifest.toml`
 
 ```toml
+[plugin]
+name = "token-risk-check"
+version = "0.1.0"
+description = "Assess SPL/Token-2022 mint security risk before transacting: mint/freeze authority, Token-2022 extensions, transfer hooks, permanent delegate. Read-only, zero custody."
+author = "peterpetir123"
+wasm_path = "token_risk_check.wasm"
+capabilities = ["tool"]
+permissions = ["http_client", "config_read"]
+
 [skill]
 name = "token-risk-check"
 version = "0.1.0"
