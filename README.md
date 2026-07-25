@@ -32,20 +32,39 @@ Standard Solana SDKs (`solana-sdk`, `solana-client`) fail to compile on `wasm32-
 | `token-risk-check` | **T0** (Read-Only) | **Zero Custody**. Read-only RPC calls. Input sanitization prevents prompt injection; invalid mint addresses fail closed immediately. |
 | `spl-transfer-build` | **T1** (Unsigned Build) | **Zero Custody**. Constructs *unsigned* Base64 transactions. Does not store or accept private keys. Prevents relative amount exploits ("all", "max") by failing closed on non-numeric inputs. |
 
-### 6. Reproduction Guide for Operators
-1. **Clone Repo**:
-   ```bash
-   git clone https://github.com/peterpetir123/zeroclaw-solana-plugins.git
-   cd zeroclaw-solana-plugins
-   ```
-2. **Run Comprehensive Test Suite (49/49 Unit Tests)**:
-   ```bash
-   ./demo_test.sh
-   ```
-3. **Run Live Plugin Demonstration & JSON Outputs**:
-   ```bash
-   ./demo_live.sh
-   ```
+### 6. Reproduction Guide for Operators & Judges
+
+Operators and judges can verify each plugin individually using standard Rust / Cargo tools:
+
+#### Step 1: Clone Repository
+```bash
+git clone https://github.com/peterpetir123/zeroclaw-solana-plugins.git
+cd zeroclaw-solana-plugins
+```
+
+#### Step 2: Run Unit Tests for Each Plugin Individually
+* **1. `solana-lite` (Shared Cryptography & V0 Serializer - 29 tests):**
+  ```bash
+  cd plugins/solana-lite && cargo test && cd ../..
+  ```
+* **2. `token-risk-check` (T0 Security Auditor - 11 tests):**
+  ```bash
+  cd plugins/token-risk-check && cargo test && cd ../..
+  ```
+* **3. `spl-transfer-build` (T1 Unsigned Transaction Builder - 9 tests):**
+  ```bash
+  cd plugins/spl-transfer-build && cargo test && cd ../..
+  ```
+
+#### Step 3: Build WebAssembly (`wasm32-wasip2`) Binaries
+* **Build `token-risk-check.wasm`:**
+  ```bash
+  cd plugins/token-risk-check && cargo build --target wasm32-wasip2 --release && cd ../..
+  ```
+* **Build `spl-transfer-build.wasm`:**
+  ```bash
+  cd plugins/spl-transfer-build && cargo build --target wasm32-wasip2 --release && cd ../..
+  ```
 
 ---
 
