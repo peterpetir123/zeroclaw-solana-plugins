@@ -1,73 +1,88 @@
-# ZeroClaw Solana Plugin Suite
+# ZeroClaw Solana Plugin Suite & SOP Orchestration
 
-A suite of high-performance, zero-custody WebAssembly tool plugins (`wasm32-wasip2`) for the ZeroClaw AI agent runtime, bringing Solana transaction capability and security auditing to autonomous agents.
+A suite of high-performance, zero-custody WebAssembly tool plugins (`wasm32-wasip2`) and automated Standard Operating Procedures (SOPs) for the **ZeroClaw AI Agent Runtime**, bringing Solana transaction capability, token security auditing, and Human-in-the-Loop (HITL) approval gates to autonomous AI agents.
 
 ---
 
 ## 📋 Comprehensive Write-Up & Technical Report
 
 ### 1. What It Does
-The **ZeroClaw Solana Plugin Suite** equips autonomous AI agents with two essential, secure tools:
+The **ZeroClaw Solana Plugin Suite** equips autonomous AI agents with essential, secure tools and automated workflow guardrails:
 - **`token-risk-check`**: Scans any SPL or Token-2022 mint on Solana to evaluate critical security risks (Freeze Authorities, Mint Authorities, Permanent Delegates, Transfer Hooks, and Fees). Returns a capped Red-Amber-Green (RAG) risk report.
 - **`spl-transfer-build`**: Safely constructs unsigned, human-verifiable Solana Versioned Transactions (v0 Base64) for SOL and SPL token transfers, automatically detecting missing Associated Token Accounts (ATAs) and injecting `CreateIdempotent` instructions.
+- **`solana-transfer-guard` (SOP)**: Multi-step governance workflow that mandates a pre-transfer token risk audit before assembling an unsigned transfer payload, enforceably paused by a Human-in-the-Loop (HITL) approval gate.
 
-### 2. Who It's For
-Designed for **autonomous agent operators, DeFi trading bots, and AI assistant channels (Telegram, Discord, Terminal)** operating on Solana. It enables AI agents to query token risks and assemble transactions without ever holding or touching private key custody.
+---
 
-### 3. ZeroClaw Features & Skill Integration
-- **WIT v0 Component Model (`wasm32-wasip2`)**: Exposes native `wit/v0` tool execution interfaces.
-- **WASI HTTP Client (`waki`)**: Performs outbound JSON-RPC queries directly through WASI network interfaces.
-- **Skill Registration (`zeroclaw skills install`)**: Fully compatible with ZeroClaw CLI skill/plugin loader.
-- **Runtime Capability & Config Ingestion (`__config`)**: Consumes host-injected `SOLANA_RPC_URL` under strict permissions (`http_client`, `config_read`).
+## 🏗️ Architecture & SOP Workflow Diagram
 
-### 4. What We Had to Build (`solana-lite`)
-Standard Solana SDKs (`solana-sdk`, `solana-client`) fail to compile on `wasm32-wasip2` due to heavy OS-level dependencies (`tokio`, `sysinfo`, `net`). We built **`solana-lite`**, a custom lightweight Rust library:
-- Zero-dependency Base58 parser & encoder.
-- Off-curve Ed25519 PDA & ATA address derivation using `curve25519-dalek`.
-- Minimalist Versioned Transaction v0 byte serializer (`0x80` version prefix, compact-u16 format).
-- Token-2022 Type-Length-Value (TLV) extension parser.
+```
+                             [ User / Trigger ]
+                                     │
+                                     ▼
+                    ┌─────────────────────────────────┐
+                    │  SOP: solana-transfer-guard     │
+                    └─────────────────────────────────┘
+                                     │
+                                     ▼
+                    ┌─────────────────────────────────┐
+                    │ Step 1: Audit Token Mint Risk   │
+                    │   Plugin: token-risk-check (T0) │
+                    └─────────────────────────────────┘
+                                     │
+                                     ▼
+                    ┌─────────────────────────────────┐
+                    │ Step 2: HITL Approval Checkpoint│
+                    │   Status: waiting_approval      │
+                    └─────────────────────────────────┘
+                                     │
+                        [ Human Operator Approve ]
+                                     │
+                                     ▼
+                    ┌─────────────────────────────────┐
+                    │ Step 3: Build Unsigned Tx Payload│
+                    │   Plugin: spl-transfer-build (T1)│
+                    └─────────────────────────────────┘
+                                     │
+                                     ▼
+                    ┌─────────────────────────────────┐
+                    │ Step 4: Final Payload Delivery  │
+                    │   Output: Unsigned Base64 V0 Tx │
+                    └─────────────────────────────────┘
+```
 
-### 5. Custody Tier & Threat Model
-| Plugin | Custody Tier | Threat Model & Security Controls |
+---
+
+## 🔒 Custody Tier & Threat Model
+
+| Component | Custody Tier | Threat Model & Security Controls |
 |---|---|---|
 | `token-risk-check` | **T0** (Read-Only) | **Zero Custody**. Read-only RPC calls. Input sanitization prevents prompt injection; invalid mint addresses fail closed immediately. |
 | `spl-transfer-build` | **T1** (Unsigned Build) | **Zero Custody**. Constructs *unsigned* Base64 transactions. Does not store or accept private keys. Prevents relative amount exploits ("all", "max") by failing closed on non-numeric inputs. |
+| `solana-transfer-guard` | **T0 → T1 Pipeline** | **Enforceable Approval Gate**. Enforces HITL approval between risk check and transaction construction, preventing automated execution of unverified token transfers. |
 
 ---
 
-## 🚀 Execution & Verification Guide for Operators & Judges
+## ⚡ ZeroClaw Runtime & Reliability Backoff Policy
+
+To ensure high-fidelity execution and resilience against API rate-limiting (e.g. Gemini 429 Rate Limits), ZeroClaw runtime's `config.toml` implements exponential backoff retry policies:
+
+```toml
+[reliability]
+provider_retries = 5
+provider_backoff_ms = 15000
+```
+
+When an LLM provider encounters rate limits (429), the `zeroclaw_providers::reliable` engine automatically schedules retries with backoff delays (15s, 10s, etc.), keeping SOP runs intact without failing the turn.
+
+---
+
+## 🚀 Quickstart & Verification Guide
 
 > [!NOTE]
-> Make sure you are inside the root directory of `zeroclaw-solana-plugins` repository before running the commands below.
+> Ensure you are inside the root directory of `zeroclaw-solana-plugins` repository before executing the commands below.
 
-### Step 1: Clone Repository & Set Solana RPC URL (Optional)
-By default, execution targets Solana Mainnet (`https://api.mainnet-beta.solana.com`). You can set a custom RPC via environment variable:
-```bash
-git clone https://github.com/peterpetir123/zeroclaw-solana-plugins.git
-cd zeroclaw-solana-plugins
-
-export SOLANA_RPC_URL="https://api.mainnet-beta.solana.com"
-```
-
----
-
-### Step 2: Live Mainnet Functional Execution (Direct Host Binaries)
-
-#### 1. Live Token Risk Audit (`token-risk-check`):
-Audit any token mint directly on Solana Mainnet (e.g. USDC `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`):
-```bash
-(cd plugins/token-risk-check && cargo run --bin token-risk-check-cli EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v)
-```
-
-#### 2. Live Unsigned Transaction Construction (`spl-transfer-build`):
-Construct an unsigned Versioned V0 transaction directly using live Mainnet blockhashes and rent exemptions:
-```bash
-(cd plugins/spl-transfer-build && cargo run --bin spl-transfer-build-cli 8UQUJWj4XnYFaAZjP79SGiwmrcT3fuy3pD7ig5B5bjW2 EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v 1000000)
-```
-
----
-
-### Step 3: Run Unit Test Suite (49 Tests)
+### Step 1: Run Unit Test Suite (49 Tests)
 Run all 49 failsafe security tests across the workspace:
 ```bash
 # 1. solana-lite (29 tests)
@@ -82,8 +97,8 @@ Run all 49 failsafe security tests across the workspace:
 
 ---
 
-### Step 4: Build WebAssembly (`wasm32-wasip2`) Release Binaries
-Compile the WebAssembly components for production ZeroClaw runtime deployment:
+### Step 2: Build WebAssembly (`wasm32-wasip2`) Component Binaries
+Compile WASM components for production ZeroClaw runtime deployment:
 ```bash
 (cd plugins/token-risk-check && cargo build --target wasm32-wasip2 --release)
 (cd plugins/spl-transfer-build && cargo build --target wasm32-wasip2 --release)
@@ -91,48 +106,58 @@ Compile the WebAssembly components for production ZeroClaw runtime deployment:
 
 ---
 
-### Step 5: Install Plugins into ZeroClaw CLI Runtime
-ZeroClaw CLI (v0.8.3+) uses `zeroclaw skills` subcommands to manage plugins and skills:
+### Step 3: Install Plugins & SOP into ZeroClaw CLI Runtime
+ZeroClaw CLI uses `zeroclaw skills` subcommands to manage WASM plugins:
 
 ```bash
-# Install both skills into ZeroClaw
+# 1. Install skills into ZeroClaw
 zeroclaw skills install ./plugins/token-risk-check
 zeroclaw skills install ./plugins/spl-transfer-build
 
-# Verify registered skills
+# 2. Verify registered skills
 zeroclaw skills list
 ```
 
 ---
 
-## 🛠️ Included Plugins Summary
+### Step 4: Execute SOP Governance Pipeline
 
-| Plugin | Custody Tier | Description | Binary Size |
-|---|---|---|---|
-| [`token-risk-check`](./plugins/token-risk-check) | **T0** (Read-Only) | Assesses SPL / Token-2022 mint security returning RAG status. | **~173 KB** |
-| [`spl-transfer-build`](./plugins/spl-transfer-build) | **T1** (Unsigned Build) | Constructs unsigned Versioned Tx v0 (Base64) for SOL & SPL transfers. | **~212 KB** |
+#### 1. Trigger SOP Run via REST API:
+```bash
+curl -s -X POST http://127.0.0.1:42617/api/sops/solana-transfer-guard/run \
+  -H "Content-Type: application/json" \
+  -d '{"payload": "{\"mint_address\": \"So11111111111111111111111111111111111111112\", \"from\": \"4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU\", \"to\": \"675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8\", \"amount\": \"100000\"}"}'
+```
+
+#### 2. Check Run Overlay State:
+```bash
+curl -s http://127.0.0.1:42617/api/sops/solana-transfer-guard/runs/$RUN_ID/overlay
+```
+
+#### 3. Approve HITL Gate via ZeroClaw CLI:
+```bash
+zeroclaw sop approve $RUN_ID
+```
 
 ---
 
-## 🧪 Test Suite & Verification
+## 🛠️ Included Plugins & SOP Summary
 
-- **49 / 49 Unit Tests Passed (100% Pass Rate)**
-- Built & validated for target **`wasm32-wasip2`** without warnings.
-- Installed & audited under ZeroClaw CLI runtime.
+| Item | Type | Description | Size / Config |
+|---|---|---|---|
+| [`token-risk-check`](./plugins/token-risk-check) | Plugin (WASM) | Assesses SPL / Token-2022 mint security returning RAG status. | **~173 KB** |
+| [`spl-transfer-build`](./plugins/spl-transfer-build) | Plugin (WASM) | Constructs unsigned Versioned Tx v0 (Base64) for SOL & SPL transfers. | **~212 KB** |
+| [`solana-transfer-guard`](./sops/solana-transfer-guard) | SOP Workflow | 4-step governance pipeline with HITL approval gate. | **SOP.toml / SOP.md** |
+
+---
 
 ## ⚙️ Model Provider Recommendation
 
-This repository's smoke-test proof (`tool_invoke_proof.log`) was generated using Google Gemini's free tier (`gemini-2.5-flash` via Google AI Studio) purely to demonstrate the plugin execution path (WASM loading → `waki`/`wasi:http` → tool result) without requiring paid credentials for judging/reproduction.
-
-**For production deployment**, we recommend:
-- **Anthropic Claude (Sonnet/Opus)** — strongest instruction-following for approval-gate summaries and tool-use reliability, particularly important for T1/T2 custody flows where misinterpreting a transfer amount or recipient has real financial consequences.
-- **A paid-tier provider generally** — free tiers (Gemini free, etc.) carry tighter rate limits (e.g. Gemini free: 0.5 req/s) unsuitable for cron-polling SOPs or multi-user agent deployments at scale.
-
-Swap providers via `zeroclaw config set agents.main.model_provider <provider>.default` — no plugin code changes required, since the plugins are provider-agnostic (they only communicate via the `tool-plugin` WIT world, not directly with any LLM).
+- **Anthropic Claude (Sonnet/Opus)** — Recommended for production due to superior instruction-following and tool-use reliability for financial transaction approval gates.
+- **Google Gemini / OpenAI / OpenRouter** — Fully supported. Rate limits are handled by ZeroClaw's `[reliability]` provider retry backoff policies.
 
 ---
 
 ## 📄 License
 
 MIT
-

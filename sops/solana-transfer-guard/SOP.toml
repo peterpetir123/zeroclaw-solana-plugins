@@ -1,0 +1,10 @@
+[sop]
+name = "solana-transfer-guard"
+description = "Multi-step Solana token security audit → unsigned transaction construction pipeline with human approval checkpoint. Zero private-key custody (T0/T1)."
+version = "0.1.0"
+max_concurrent = 1
+admission_policy = "hold"
+deterministic = false
+
+[[triggers]]
+type = "manual"
