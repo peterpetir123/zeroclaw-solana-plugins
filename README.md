@@ -128,15 +128,29 @@ curl -s -X POST http://127.0.0.1:42617/api/sops/solana-transfer-guard/run \
   -H "Content-Type: application/json" \
   -d '{"payload": "{\"mint_address\": \"So11111111111111111111111111111111111111112\", \"from\": \"4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU\", \"to\": \"675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8\", \"amount\": \"100000\"}"}'
 ```
+> *This command returns a JSON response containing the unique `run_id` (e.g. `{"run_id":"run-1785421255609729742-0001"}`).*
 
 #### 2. Check Run Overlay State:
+You can check the overlay state using either of the following two methods:
+
+##### **Method 1: Export RUN_ID to Terminal Variable**
 ```bash
+# 1. Export the run_id returned from step 1
+export RUN_ID="run-1785421255609729742-0001"
+
+# 2. Query overlay status using the variable
 curl -s http://127.0.0.1:42617/api/sops/solana-transfer-guard/runs/$RUN_ID/overlay
+```
+
+##### **Method 2: Query Directly Using Run ID String**
+```bash
+curl -s http://127.0.0.1:42617/api/sops/solana-transfer-guard/runs/run-1785421255609729742-0001/overlay
 ```
 
 #### 3. Approve HITL Gate via ZeroClaw CLI:
 ```bash
 zeroclaw sop approve $RUN_ID
+# Or directly: zeroclaw sop approve run-1785421255609729742-0001
 ```
 
 ---
