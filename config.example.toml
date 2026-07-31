@@ -1,0 +1,69 @@
+# ─────────────────────────────────────────────────────────────
+# ZeroClaw Config — Example for Solana DeFi Guardian Agent
+# ─────────────────────────────────────────────────────────────
+# Copy this file to ~/.zeroclaw/config.toml and fill in your API key.
+#
+#   cp config.example.toml ~/.zeroclaw/config.toml
+#   # Edit the api_key line below with your real key
+#
+# Supported key formats:
+#   Gemini AI Studio: AIzaSy...  (get from https://aistudio.google.com/apikey)
+#   Gemini CLI OAuth: AQ.Ab8... (from `gemini auth login`)
+# ─────────────────────────────────────────────────────────────
+
+schema_version = 3
+
+[sop]
+sops_dir = "/home/YOUR_USER/.zeroclaw/data/sops"
+
+[reliability]
+provider_retries = 5          # Retry LLM calls up to 5 times on 429/5xx
+provider_backoff_ms = 15000   # Wait 15s between retries
+
+[gateway]
+port = 42617
+host = "127.0.0.1"
+require_pairing = false
+
+[risk_profiles.default]
+description = "Default risk profile"
+auto_approve = ["*"]
+
+[agents.main]
+enabled = true
+model_provider = "gemini.default"
+risk_profile = "default"
+acp_enable_mcp = false
+delegate_same_risk_profile = true
+
+[agents.main.a2a]
+published = false
+
+[agents.main.identity]
+format = "openclaw"
+
+[agents.main.memory]
+backend = "sqlite"
+
+[agents.main.precheck]
+enabled = true
+timeout_secs = 5
+
+[agents.main.workspace]
+unrestricted_filesystem = false
+
+[providers.models.gemini.default]
+api_key = "YOUR_GEMINI_API_KEY_HERE"   # <── Replace this
+model = "gemini-2.0-flash"
+
+[plugins]
+enabled = true
+auto_discover = true
+
+[[plugins.entries]]
+name = "token-risk-check"
+config = { solana_rpc_url = "https://api.mainnet-beta.solana.com" }
+
+[[plugins.entries]]
+name = "spl-transfer-build"
+config = { solana_rpc_url = "https://api.mainnet-beta.solana.com" }
