@@ -4,3 +4,5 @@ daemon_live.log
 ZEROCLAW_SOLANA_PLUGINS_FOR_CLAUDE.md
 codebase_audit_for_claude.md
 sop_injection_variant1_response.json
+debug_history_archive/
+config_snapshot.toml

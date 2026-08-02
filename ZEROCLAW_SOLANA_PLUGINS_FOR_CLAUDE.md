@@ -12,6 +12,7 @@ daemon_live.log
 ZEROCLAW_SOLANA_PLUGINS_FOR_CLAUDE.md
 codebase_audit_for_claude.md
 sop_injection_variant1_response.json
+debug_history_archive/
 
 ```
 
@@ -494,27 +495,6 @@ zeroclaw sop approve $RUN_ID
 
 ```
 
-## File: `approve_step1_1785640044.txt`
-
-```
-resumed
-
-```
-
-## File: `approve_step2_1785640064.txt`
-
-```
-resumed
-
-```
-
-## File: `approve_step4_1785640101.txt`
-
-```
-resumed
-
-```
-
 ## File: `codebase_audit_for_claude.md`
 
 ```markdown
@@ -977,6 +957,138 @@ config = { solana_rpc_url = "https://api.mainnet-beta.solana.com" }
 [system] [2m2026-08-02T03:09:44.326091Z[0m [32m INFO[0m [1mzeroclaw_scope[0m[1m{[0m[3mrisk_profile[0m[2m=[0mdefault [3mruntime_profile[0m[2m=[0m [3mmemory_namespace[0m[2m=[0msqlite.default[1m}[0m[2m:[0m [2mzeroclaw_log_event[0m[2m:[0m [3mzc_name[0m[2m=[0mzeroclaw_runtime::agent::turn [3mzc_action[0m[2m=[0mcomplete [3mzc_outcome[0m[2m=[0msuccess [3mzc_category[0m[2m=[0magent [3mzc_attrs[0m[2m=[0m{"iteration":2,"model":"openai/gpt-4o-mini","text":"The unsigned transaction has been successfully constructed. Here are the details:\n\n- **Transaction (Base64)**: `AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAQABBDtELLORIVfxOpM9ATQoLQMrX/7NAaLb8bd5BgjfAC6n+TEEy1UDDLLbSLQddGUc8Q0CZ9FEZd0e5dEpsW29wXZ+sv2U41LUZSAexaNBD3OLhKP+VClvE3B4fUUFLSIbhQbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpgm6oGKmnbcQL/kxWwESuhCpiVgbkkNg9TUroZa1qVI4BAwMBAgAJA0BCDwAAAAAAAA==`\n- **Transfer Amount**: 1,000,000 smallest units of the SPL token (mint: So11111111111111111111111111111111111111112)\n- **Recipient**: 675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8\n- **Estimated Fee**: 5,000 lamports\n\nPlease proceed accordingly with this unsigned transaction.","trace_id":"d6ae9788-5f42-4856-adbe-0ba191f8a8ec"} [3mzc_has_duration[0m[2m=[0mfalse [3mzc_duration_ms[0m[2m=[0m0 [3mzc_file[0m[2m=[0mcrates/zeroclaw-runtime/src/agent/turn/mod.rs [3mzc_line[0m[2m=[0m766 turn_final_response
 [system] [2m2026-08-02T03:09:44.327461Z[0m [32m INFO[0m [2mzeroclaw_log_event[0m[2m:[0m [3mzc_name[0m[2m=[0mzeroclaw_runtime::sop::executor [3mzc_action[0m[2m=[0mnote [3mzc_outcome[0m[2m=[0munknown [3mzc_category[0m[2m=[0m [3mzc_attrs[0m[2m=[0m{"run_id":"run-1785640132168602024-0002","step":4} [3mzc_has_duration[0m[2m=[0mfalse [3mzc_duration_ms[0m[2m=[0m0 [3mzc_file[0m[2m=[0mcrates/zeroclaw-runtime/src/sop/executor.rs [3mzc_line[0m[2m=[0m302 SOP headless driver: run parked at a gate
 [system] [2m2026-08-02T03:09:44.327500Z[0m [32m INFO[0m [2mzeroclaw_log_event[0m[2m:[0m [3mzc_name[0m[2m=[0mruntime.task.spawn [3mzc_action[0m[2m=[0mcomplete [3mzc_outcome[0m[2m=[0msuccess [3mzc_category[0m[2m=[0m [3mzc_attrs[0m[2m=[0m{"task_module":"zeroclaw_runtime::sop::executor","task_site":"crates/zeroclaw-runtime/src/sop/executor.rs:164"} [3mzc_has_duration[0m[2m=[0mtrue [3mzc_duration_ms[0m[2m=[0m12627 [3mzc_file[0m[2m=[0mcrates/zeroclaw-runtime/src/sop/executor.rs [3mzc_line[0m[2m=[0m164 task complete
+[system] [2m2026-08-02T03:15:04.294939Z[0m [32m INFO[0m [2mzeroclaw_log_event[0m[2m:[0m [3mzc_name[0m[2m=[0mzeroclaw [3mzc_action[0m[2m=[0mnote [3mzc_outcome[0m[2m=[0munknown [3mzc_category[0m[2m=[0m [3mzc_attrs[0m[2m=[0m{"cron_no_match":0,"cron_skipped":0,"cron_started":0,"pruned_runs":0,"reaped_claims":0,"timed_out":1} [3mzc_has_duration[0m[2m=[0mfalse [3mzc_duration_ms[0m[2m=[0m0 [3mzc_file[0m[2m=[0msrc/main.rs [3mzc_line[0m[2m=[0m7683 SOP maintenance tick
+
+```
+
+## File: `debug_history_archive/approve_step1_1785640044.txt`
+
+```
+resumed
+
+```
+
+## File: `debug_history_archive/approve_step2_1785640064.txt`
+
+```
+resumed
+
+```
+
+## File: `debug_history_archive/approve_step4_1785640101.txt`
+
+```
+resumed
+
+```
+
+## File: `debug_history_archive/overlay_10_1785640101.json`
+
+```json
+{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"waiting_approval","current_step":4,"total_steps":4,"waiting":true,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"completed"},{"step":3,"state":"completed"},{"step":4,"state":"active"}]}
+
+```
+
+## File: `debug_history_archive/overlay_11_1785640105.json`
+
+```json
+{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"running","current_step":4,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"completed"},{"step":3,"state":"completed"},{"step":4,"state":"active"}]}
+
+```
+
+## File: `debug_history_archive/overlay_12_1785640109.json`
+
+```json
+{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"completed","current_step":4,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"completed"},{"step":3,"state":"completed"},{"step":4,"state":"completed"}]}
+
+```
+
+## File: `debug_history_archive/overlay_1_1785640064.json`
+
+```json
+{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"waiting_approval","current_step":2,"total_steps":4,"waiting":true,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"active"},{"step":3,"state":"pending"},{"step":4,"state":"pending"}]}
+
+```
+
+## File: `debug_history_archive/overlay_2_1785640068.json`
+
+```json
+{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"running","current_step":2,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"active"},{"step":3,"state":"pending"},{"step":4,"state":"pending"}]}
+
+```
+
+## File: `debug_history_archive/overlay_3_1785640073.json`
+
+```json
+{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"running","current_step":2,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"active"},{"step":3,"state":"pending"},{"step":4,"state":"pending"}]}
+
+```
+
+## File: `debug_history_archive/overlay_4_1785640077.json`
+
+```json
+{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"running","current_step":2,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"active"},{"step":3,"state":"pending"},{"step":4,"state":"pending"}]}
+
+```
+
+## File: `debug_history_archive/overlay_5_1785640081.json`
+
+```json
+{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"running","current_step":2,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"active"},{"step":3,"state":"pending"},{"step":4,"state":"pending"}]}
+
+```
+
+## File: `debug_history_archive/overlay_6_1785640085.json`
+
+```json
+{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"running","current_step":2,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"active"},{"step":3,"state":"pending"},{"step":4,"state":"pending"}]}
+
+```
+
+## File: `debug_history_archive/overlay_7_1785640089.json`
+
+```json
+{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"running","current_step":3,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"completed"},{"step":3,"state":"active"},{"step":4,"state":"pending"}]}
+
+```
+
+## File: `debug_history_archive/overlay_8_1785640093.json`
+
+```json
+{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"running","current_step":3,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"completed"},{"step":3,"state":"active"},{"step":4,"state":"pending"}]}
+
+```
+
+## File: `debug_history_archive/overlay_9_1785640097.json`
+
+```json
+{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"running","current_step":3,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"completed"},{"step":3,"state":"active"},{"step":4,"state":"pending"}]}
+
+```
+
+## File: `debug_history_archive/overlay_initial_1785640044.json`
+
+```json
+{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"waiting_approval","current_step":1,"total_steps":4,"waiting":true,"paused":false,"nodes":[{"step":1,"state":"active"},{"step":2,"state":"pending"},{"step":3,"state":"pending"},{"step":4,"state":"pending"}]}
+```
+
+## File: `debug_history_archive/sop_injection_amount_all_1785640132.json`
+
+```json
+{"run_id":"run-1785640132168602024-0002"}
+
+```
+
+## File: `debug_history_archive/sop_injection_variant1_response.json`
+
+```json
+{"run_id":"run-1785048551626968223-0003"}
+```
+
+## File: `debug_history_archive/sop_trigger_FINAL_1785640044.json`
+
+```json
+{"run_id":"run-1785640044014783293-0001"}
 
 ```
 
@@ -1100,102 +1212,6 @@ echo -e "\n${GREEN}=============================================================
 echo -e "${GREEN}   ✅ ALL 49 UNIT TESTS PASSED & WASM COMPONENTS BUILT!     ${NC}"
 echo -e "${GREEN}==============================================================${NC}"
 
-```
-
-## File: `openrouter_test.json`
-
-```json
-{"error":{"message":"No endpoints found for google/gemini-2.0-flash-001.","code":404},"user_id":"user_3AjvHxmLe3ApMEjNcZ2Q4GyW1Lp"}
-```
-
-## File: `overlay_10_1785640101.json`
-
-```json
-{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"waiting_approval","current_step":4,"total_steps":4,"waiting":true,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"completed"},{"step":3,"state":"completed"},{"step":4,"state":"active"}]}
-
-```
-
-## File: `overlay_11_1785640105.json`
-
-```json
-{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"running","current_step":4,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"completed"},{"step":3,"state":"completed"},{"step":4,"state":"active"}]}
-
-```
-
-## File: `overlay_12_1785640109.json`
-
-```json
-{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"completed","current_step":4,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"completed"},{"step":3,"state":"completed"},{"step":4,"state":"completed"}]}
-
-```
-
-## File: `overlay_1_1785640064.json`
-
-```json
-{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"waiting_approval","current_step":2,"total_steps":4,"waiting":true,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"active"},{"step":3,"state":"pending"},{"step":4,"state":"pending"}]}
-
-```
-
-## File: `overlay_2_1785640068.json`
-
-```json
-{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"running","current_step":2,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"active"},{"step":3,"state":"pending"},{"step":4,"state":"pending"}]}
-
-```
-
-## File: `overlay_3_1785640073.json`
-
-```json
-{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"running","current_step":2,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"active"},{"step":3,"state":"pending"},{"step":4,"state":"pending"}]}
-
-```
-
-## File: `overlay_4_1785640077.json`
-
-```json
-{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"running","current_step":2,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"active"},{"step":3,"state":"pending"},{"step":4,"state":"pending"}]}
-
-```
-
-## File: `overlay_5_1785640081.json`
-
-```json
-{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"running","current_step":2,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"active"},{"step":3,"state":"pending"},{"step":4,"state":"pending"}]}
-
-```
-
-## File: `overlay_6_1785640085.json`
-
-```json
-{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"running","current_step":2,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"active"},{"step":3,"state":"pending"},{"step":4,"state":"pending"}]}
-
-```
-
-## File: `overlay_7_1785640089.json`
-
-```json
-{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"running","current_step":3,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"completed"},{"step":3,"state":"active"},{"step":4,"state":"pending"}]}
-
-```
-
-## File: `overlay_8_1785640093.json`
-
-```json
-{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"running","current_step":3,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"completed"},{"step":3,"state":"active"},{"step":4,"state":"pending"}]}
-
-```
-
-## File: `overlay_9_1785640097.json`
-
-```json
-{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"running","current_step":3,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"completed"},{"step":3,"state":"active"},{"step":4,"state":"pending"}]}
-
-```
-
-## File: `overlay_initial_1785640044.json`
-
-```json
-{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"waiting_approval","current_step":1,"total_steps":4,"waiting":true,"paused":false,"nodes":[{"step":1,"state":"active"},{"step":2,"state":"pending"},{"step":3,"state":"pending"},{"step":4,"state":"pending"}]}
 ```
 
 ## File: `plugins/solana-lite/Cargo.lock`
@@ -7592,19 +7608,6 @@ When a user requests a token transfer or payment:
 
 ```
 
-## File: `sop_injection_amount_all_1785640132.json`
-
-```json
-{"run_id":"run-1785640132168602024-0002"}
-
-```
-
-## File: `sop_injection_variant1_response.json`
-
-```json
-{"run_id":"run-1785048551626968223-0003"}
-```
-
 ## File: `sop_run_proof.log`
 
 ```text
@@ -7645,6 +7648,13 @@ Based on the actual 'solana-transfer-guard' SOP execution for the USDC token (EP
     *   **MINT_AUTHORITY_ACTIVE:** Mint authority is active; supply can be increased at any time. (Severity: AMBER)
 
 This indicates significant risks associated with this token, as both freeze and mint authorities are active.
+
+```
+
+## File: `sop_run_proof_overlay_completed.json`
+
+```json
+{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"completed","current_step":4,"total_steps":4,"waiting":false,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"completed"},{"step":3,"state":"completed"},{"step":4,"state":"completed"}]}
 
 ```
 
@@ -7742,7 +7752,7 @@ If you believe this is a legitimate request, please rephrase it without attempti
 
 ```
 
-## File: `sop_trigger_FINAL_1785640044.json`
+## File: `sop_run_proof_trigger_final.json`
 
 ```json
 {"run_id":"run-1785640044014783293-0001"}

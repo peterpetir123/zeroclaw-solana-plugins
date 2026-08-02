@@ -1,1 +1,0 @@
-{"run_id":"run-1785640044014783293-0001","sop_name":"solana-transfer-guard","status":"waiting_approval","current_step":2,"total_steps":4,"waiting":true,"paused":false,"nodes":[{"step":1,"state":"completed"},{"step":2,"state":"active"},{"step":3,"state":"pending"},{"step":4,"state":"pending"}]}
