@@ -93,7 +93,7 @@ We implement a 3-layer security model to prevent malicious drain attacks:
 - Building ZeroClaw host from source (~10-15 min depending on CPU)
 - Plugin compilation & unit test suite execution (~2 min)
 
-*Note on LLM Providers:* For multi-step SOP runs, we recommend **OpenRouter** or **Groq** over strict free-tier Gemini endpoints to avoid aggressive 5 RPM rate limits.
+*Note on LLM Providers:* For multi-step SOP runs, we recommend **OpenRouter** (e.g. `gpt-4o-mini`) over strict free-tier Gemini endpoints to avoid aggressive 5 RPM rate limits. Groq works for small models like `llama-3.1-8b-instant` but has 12K TPM limits on free tier.
 
 ### Quick Start
 ```bash
@@ -116,6 +116,13 @@ cp config.example.toml ~/.zeroclaw/config.toml
 ```
 
 ### SOP Execution (With Running Daemon)
+
+> **PREREQUISITE:** The ZeroClaw daemon must be running. Start it first:
+> ```bash
+> zeroclaw daemon &    # runs in background on port 42617
+> sleep 3              # wait for gateway to start
+> ```
+
 ```bash
 # 1. Trigger SOP
 RESULT=$(curl -s -X POST http://127.0.0.1:42617/api/sops/solana-transfer-guard/run \
@@ -123,21 +130,24 @@ RESULT=$(curl -s -X POST http://127.0.0.1:42617/api/sops/solana-transfer-guard/r
   -d '{"payload": "{\"mint_address\": \"So11111111111111111111111111111111111111112\", \"from\": \"4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU\", \"to\": \"675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8\", \"amount\": \"100000\"}"}')
 echo "$RESULT"
 
-# 2. Extract run_id and check overlay
-export RUN_ID=$(echo $RESULT | grep -o '"run_id":"[^"]*' | cut -d'"' -f4)
-curl -s http://127.0.0.1:42617/api/sops/solana-transfer-guard/runs/$RUN_ID/overlay | jq .
+# 2. Extract run_id (requires python3)
+export RUN_ID=$(echo $RESULT | python3 -c "import sys,json; print(json.load(sys.stdin).get('run_id',''))")
+echo "RUN_ID: $RUN_ID"
 
-# 3. Approve HITL gate for Step 2
-zeroclaw sop approve $RUN_ID
+# 3. Check overlay state
+curl -s http://127.0.0.1:42617/api/sops/solana-transfer-guard/runs/$RUN_ID/overlay
 
-# 4. Approve HITL gate for Step 4
+# 4. Approve HITL gate (repeat at each checkpoint — Step 2 and Step 4)
 zeroclaw sop approve $RUN_ID
 ```
+
+> **If you get `"SOP held (a run is already in flight)"`**: A previous run left a stale lock. See the Troubleshooting section in [README.md](./README.md#-troubleshooting).
 
 ---
 
 ## Known Limitations & Roadmap
 
+- **SOP Concurrency:** The `admission_policy = "hold"` setting means only one run at a time. If a run is interrupted (daemon crash, Ctrl+C), you must clear the stale claim before triggering a new run (see README Troubleshooting).
 - **Trigger Gateway:** Current interaction is via ZeroClaw's HTTP Gateway REST API (`/api/sops/...`). Direct chat channel integrations (Telegram/Discord bots) are planned on the roadmap.
 - **Multisig Integration:** Future versions aim to interface directly with Squads v4 Proposer roles for automated multisig drafting.
 
@@ -150,6 +160,7 @@ zeroclaw sop approve $RUN_ID
 - **SOP Definition:** [`sops/solana-transfer-guard/`](./sops/solana-transfer-guard/)
 - **Skill:** [`skills/solana-guardian/SKILL.md`](./skills/solana-guardian/SKILL.md)
 - **Verified Proof Logs:**
-  - Full E2E SOP Run (Completed 4/4 Steps): Verified in `daemon_live.log` (`run-1785640044014783293-0001`)
-  - HITL Gate Overlay States: [`overlay_12_1785640109.json`](./overlay_12_1785640109.json) (`"status": "completed"`, `"nodes": [completed, completed, completed, completed]`)
-  - Prompt Injection Defense Test: [`sop_injection_amount_all_1785640132.json`](./sop_injection_amount_all_1785640132.json)
+  - Full E2E SOP Run (Completed 4/4 Steps): [`sop_run_proof_overlay_completed.json`](./sop_run_proof_overlay_completed.json)
+  - SOP Trigger Proof: [`sop_run_proof_trigger_final.json`](./sop_run_proof_trigger_final.json)
+  - Success Run Log: [`sop_run_proof_scenario1_success.log`](./sop_run_proof_scenario1_success.log)
+  - Prompt Injection Defense: [`sop_run_proof_scenario3_prompt_injection.log`](./sop_run_proof_scenario3_prompt_injection.log)

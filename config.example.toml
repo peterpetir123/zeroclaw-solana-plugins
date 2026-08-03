@@ -6,9 +6,10 @@
 #   cp config.example.toml ~/.zeroclaw/config.toml
 #   # Edit the api_key line below with your real key
 #
-# Supported key formats:
-#   Gemini AI Studio: AIzaSy...  (get from https://aistudio.google.com/apikey)
-#   Gemini CLI OAuth: AQ.Ab8... (from `gemini auth login`)
+# Supported providers (pick ONE and uncomment the matching section below):
+#   OpenRouter:  sk-or-v1-...  (get from https://openrouter.ai/keys)
+#   Gemini:      AIzaSy...     (get from https://aistudio.google.com/apikey)
+#   Groq:        gsk_...       (get from https://console.groq.com/keys)
 # ─────────────────────────────────────────────────────────────
 
 schema_version = 3
@@ -31,7 +32,7 @@ auto_approve = ["*"]
 
 [agents.main]
 enabled = true
-model_provider = "gemini.default"
+model_provider = "openrouter.default"   # ← change to match your provider below
 risk_profile = "default"
 acp_enable_mcp = false
 delegate_same_risk_profile = true
@@ -52,9 +53,20 @@ timeout_secs = 5
 [agents.main.workspace]
 unrestricted_filesystem = false
 
-[providers.models.gemini.default]
-api_key = "YOUR_GEMINI_API_KEY_HERE"   # <── Replace this
-model = "gemini-2.0-flash"
+# ─── OPTION A: OpenRouter (RECOMMENDED for multi-step SOP runs) ───
+[providers.models.openrouter.default]
+api_key = "sk-or-v1-YOUR_OPENROUTER_API_KEY"   # ← Replace this
+model = "openai/gpt-4o-mini"
+
+# ─── OPTION B: Gemini (free tier has 5 RPM limit — may fail on SOPs) ───
+# [providers.models.gemini.default]
+# api_key = "YOUR_GEMINI_API_KEY_HERE"
+# model = "gemini-2.0-flash"
+
+# ─── OPTION C: Groq (fast but 12K TPM limit — use small models) ───
+# [providers.models.groq.default]
+# api_key = "gsk_YOUR_GROQ_API_KEY"
+# model = "llama-3.1-8b-instant"
 
 [plugins]
 enabled = true

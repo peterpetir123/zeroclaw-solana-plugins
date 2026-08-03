@@ -236,20 +236,18 @@ When an LLM provider encounters rate limits (429), the `zeroclaw_providers::reli
 
 ## 🚀 Quickstart & Verification Guide
 
-> [!NOTE]
-> Ensure you are inside the root directory of `zeroclaw-solana-plugins` repository before executing the commands below.
+> [!IMPORTANT]
+> **All commands below must be run from the `zeroclaw-solana-plugins` directory**, not from the ZeroClaw host repo.
+> ```bash
+> cd /path/to/zeroclaw-solana-plugins   # ← this repo
+> ```
 
 ### Step 1: Run Unit Test Suite (49 Tests)
 Run all 49 failsafe security tests across the workspace:
 ```bash
-# 1. solana-lite (29 tests)
-(cd plugins/solana-lite && cargo test)
-
-# 2. token-risk-check (11 tests)
-(cd plugins/token-risk-check && cargo test)
-
-# 3. spl-transfer-build (9 tests)
-(cd plugins/spl-transfer-build && cargo test)
+(cd plugins/solana-lite && cargo test)         # 29 tests
+(cd plugins/token-risk-check && cargo test)    # 11 tests
+(cd plugins/spl-transfer-build && cargo test)  # 9 tests
 ```
 
 ---
@@ -263,51 +261,88 @@ Compile WASM components for production ZeroClaw runtime deployment:
 
 ---
 
-### Step 3: Install Plugins & SOP into ZeroClaw CLI Runtime
-ZeroClaw CLI uses `zeroclaw skills` subcommands to manage WASM plugins:
-
+### Step 3: Full Host Setup (Automated)
+Use the provided setup script to build the host, install plugins, and verify discovery:
 ```bash
-# 1. Install skills into ZeroClaw
-zeroclaw skills install ./plugins/token-risk-check
-zeroclaw skills install ./plugins/spl-transfer-build
+# Copy and edit config (set your LLM API key)
+cp config.example.toml ~/.zeroclaw/config.toml
+# Edit ~/.zeroclaw/config.toml — set your api_key
 
-# 2. Verify registered skills
-zeroclaw skills list
+# Run automated setup
+./setup_and_run_zeroclaw.sh
 ```
 
 ---
 
 ### Step 4: Execute SOP Governance Pipeline
 
-#### 1. Trigger SOP Run via REST API:
+> [!IMPORTANT]
+> **The ZeroClaw daemon MUST be running** before triggering any SOP.
+> Start it in a separate terminal or in the background:
+> ```bash
+> zeroclaw daemon &
+> # Wait ~3 seconds for the HTTP gateway to start on port 42617
+> ```
+
+#### 4.1 Trigger SOP Run via REST API:
 ```bash
-curl -s -X POST http://127.0.0.1:42617/api/sops/solana-transfer-guard/run \
+RESULT=$(curl -s -X POST http://127.0.0.1:42617/api/sops/solana-transfer-guard/run \
   -H "Content-Type: application/json" \
-  -d '{"payload": "{\"mint_address\": \"So11111111111111111111111111111111111111112\", \"from\": \"4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU\", \"to\": \"675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8\", \"amount\": \"100000\"}"}'
+  -d '{"payload": "{\"mint_address\": \"So11111111111111111111111111111111111111112\", \"from\": \"4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU\", \"to\": \"675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8\", \"amount\": \"100000\"}"}')
+echo "$RESULT"
 ```
-> *This command returns a JSON response containing the unique `run_id` (e.g. `{"run_id":"run-1785421255609729742-0001"}`).*
+> *Expected: `{"run_id":"run-XXXXXXXXXX-0001"}`. If you get an empty response, the daemon is not running — see above.*
 
-#### 2. Check Run Overlay State:
-You can check the overlay state using either of the following two methods:
-
-##### **Method 1: Export RUN_ID to Terminal Variable**
+#### 4.2 Extract RUN_ID and Check Overlay State:
 ```bash
-# 1. Export the run_id returned from step 1
-export RUN_ID="run-1785421255609729742-0001"
+# Extract RUN_ID from the JSON response
+export RUN_ID=$(echo $RESULT | python3 -c "import sys,json; print(json.load(sys.stdin).get('run_id',''))")
+echo "RUN_ID: $RUN_ID"
 
-# 2. Query overlay status using the variable
+# Query overlay status
 curl -s http://127.0.0.1:42617/api/sops/solana-transfer-guard/runs/$RUN_ID/overlay
 ```
 
-##### **Method 2: Query Directly Using Run ID String**
+#### 4.3 Approve HITL Gates via ZeroClaw CLI:
 ```bash
-curl -s http://127.0.0.1:42617/api/sops/solana-transfer-guard/runs/run-1785421255609729742-0001/overlay
+# Approve gate (repeat when SOP parks at each HITL checkpoint)
+zeroclaw sop approve $RUN_ID
+```
+> The SOP has HITL checkpoints at Step 2 and Step 4. You need to approve each one as the run progresses.
+
+---
+
+## 🔧 Troubleshooting
+
+### "SOP held (a run is already in flight)"
+This happens when the SOP `solana-transfer-guard` uses `admission_policy = "hold"` with `max_concurrent = 1`. If a previous run was interrupted (e.g., daemon killed mid-run), a stale concurrency lock remains in the database.
+
+**Fix — clear the stale claim and restart:**
+```bash
+python3 -c "
+import sqlite3
+conn = sqlite3.connect('$HOME/.zeroclaw/data/sop/runs.db')
+c = conn.cursor()
+c.execute('DELETE FROM sop_claims')
+c.execute('UPDATE sop_runs SET terminal = 1 WHERE terminal = 0')
+conn.commit()
+print('Stale SOP claims cleared.')
+"
+
+# Restart the daemon
+pkill zeroclaw; sleep 1; zeroclaw daemon &
 ```
 
-#### 3. Approve HITL Gate via ZeroClaw CLI:
+### Empty `$RUN_ID` / "required arguments not provided"
+This means the `curl` POST returned an error instead of a `run_id`. Common causes:
+1. **Daemon not running** — start it with `zeroclaw daemon &`
+2. **SOP held** — clear stale claims (see above)
+3. **Wrong directory** — ensure you're in `zeroclaw-solana-plugins/`, not `zeroclaw/`
+
+### "cd: no such file or directory: plugins/solana-lite"
+You are in the wrong directory. Plugin source code lives in **this repo** (`zeroclaw-solana-plugins/plugins/`), not in the ZeroClaw host repo.
 ```bash
-zeroclaw sop approve $RUN_ID
-# Or directly: zeroclaw sop approve run-1785421255609729742-0001
+cd /path/to/zeroclaw-solana-plugins   # ← correct
 ```
 
 ---
@@ -324,8 +359,15 @@ zeroclaw sop approve $RUN_ID
 
 ## ⚙️ Model Provider Recommendation
 
-- **Anthropic Claude (Sonnet/Opus)** — Recommended for production due to superior instruction-following and tool-use reliability for financial transaction approval gates.
-- **Google Gemini / OpenAI / OpenRouter** — Fully supported. Rate limits are handled by ZeroClaw's `[reliability]` provider retry backoff policies.
+For multi-step SOP runs, use a provider with sufficient rate limits:
+
+| Provider | Recommended For | Notes |
+|---|---|---|
+| **OpenRouter** (gpt-4o-mini, etc.) | Best overall for SOP runs | No aggressive TPM limits |
+| **Groq** (llama-3.1-8b-instant) | Fast inference | Free tier has 12K TPM — use smaller models |
+| **Gemini** (gemini-2.0-flash) | Quick tests | Free tier 5 RPM may fail multi-step SOPs |
+
+All rate limits are handled by ZeroClaw's `[reliability]` provider retry backoff policies.
 
 ---
 
@@ -433,7 +475,7 @@ We implement a 3-layer security model to prevent malicious drain attacks:
 - Building ZeroClaw host from source (~10-15 min depending on CPU)
 - Plugin compilation & unit test suite execution (~2 min)
 
-*Note on LLM Providers:* For multi-step SOP runs, we recommend **OpenRouter** or **Groq** over strict free-tier Gemini endpoints to avoid aggressive 5 RPM rate limits.
+*Note on LLM Providers:* For multi-step SOP runs, we recommend **OpenRouter** (e.g. `gpt-4o-mini`) over strict free-tier Gemini endpoints to avoid aggressive 5 RPM rate limits. Groq works for small models like `llama-3.1-8b-instant` but has 12K TPM limits on free tier.
 
 ### Quick Start
 ```bash
@@ -456,6 +498,13 @@ cp config.example.toml ~/.zeroclaw/config.toml
 ```
 
 ### SOP Execution (With Running Daemon)
+
+> **PREREQUISITE:** The ZeroClaw daemon must be running. Start it first:
+> ```bash
+> zeroclaw daemon &    # runs in background on port 42617
+> sleep 3              # wait for gateway to start
+> ```
+
 ```bash
 # 1. Trigger SOP
 RESULT=$(curl -s -X POST http://127.0.0.1:42617/api/sops/solana-transfer-guard/run \
@@ -463,21 +512,24 @@ RESULT=$(curl -s -X POST http://127.0.0.1:42617/api/sops/solana-transfer-guard/r
   -d '{"payload": "{\"mint_address\": \"So11111111111111111111111111111111111111112\", \"from\": \"4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU\", \"to\": \"675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8\", \"amount\": \"100000\"}"}')
 echo "$RESULT"
 
-# 2. Extract run_id and check overlay
-export RUN_ID=$(echo $RESULT | grep -o '"run_id":"[^"]*' | cut -d'"' -f4)
-curl -s http://127.0.0.1:42617/api/sops/solana-transfer-guard/runs/$RUN_ID/overlay | jq .
+# 2. Extract run_id (requires python3)
+export RUN_ID=$(echo $RESULT | python3 -c "import sys,json; print(json.load(sys.stdin).get('run_id',''))")
+echo "RUN_ID: $RUN_ID"
 
-# 3. Approve HITL gate for Step 2
-zeroclaw sop approve $RUN_ID
+# 3. Check overlay state
+curl -s http://127.0.0.1:42617/api/sops/solana-transfer-guard/runs/$RUN_ID/overlay
 
-# 4. Approve HITL gate for Step 4
+# 4. Approve HITL gate (repeat at each checkpoint — Step 2 and Step 4)
 zeroclaw sop approve $RUN_ID
 ```
+
+> **If you get `"SOP held (a run is already in flight)"`**: A previous run left a stale lock. See the Troubleshooting section in [README.md](./README.md#-troubleshooting).
 
 ---
 
 ## Known Limitations & Roadmap
 
+- **SOP Concurrency:** The `admission_policy = "hold"` setting means only one run at a time. If a run is interrupted (daemon crash, Ctrl+C), you must clear the stale claim before triggering a new run (see README Troubleshooting).
 - **Trigger Gateway:** Current interaction is via ZeroClaw's HTTP Gateway REST API (`/api/sops/...`). Direct chat channel integrations (Telegram/Discord bots) are planned on the roadmap.
 - **Multisig Integration:** Future versions aim to interface directly with Squads v4 Proposer roles for automated multisig drafting.
 
@@ -490,9 +542,10 @@ zeroclaw sop approve $RUN_ID
 - **SOP Definition:** [`sops/solana-transfer-guard/`](./sops/solana-transfer-guard/)
 - **Skill:** [`skills/solana-guardian/SKILL.md`](./skills/solana-guardian/SKILL.md)
 - **Verified Proof Logs:**
-  - Full E2E SOP Run (Completed 4/4 Steps): Verified in `daemon_live.log` (`run-1785640044014783293-0001`)
-  - HITL Gate Overlay States: [`overlay_12_1785640109.json`](./overlay_12_1785640109.json) (`"status": "completed"`, `"nodes": [completed, completed, completed, completed]`)
-  - Prompt Injection Defense Test: [`sop_injection_amount_all_1785640132.json`](./sop_injection_amount_all_1785640132.json)
+  - Full E2E SOP Run (Completed 4/4 Steps): [`sop_run_proof_overlay_completed.json`](./sop_run_proof_overlay_completed.json)
+  - SOP Trigger Proof: [`sop_run_proof_trigger_final.json`](./sop_run_proof_trigger_final.json)
+  - Success Run Log: [`sop_run_proof_scenario1_success.log`](./sop_run_proof_scenario1_success.log)
+  - Prompt Injection Defense: [`sop_run_proof_scenario3_prompt_injection.log`](./sop_run_proof_scenario3_prompt_injection.log)
 
 ```
 
@@ -626,9 +679,10 @@ SOP headless driver: executing approved step progression
 #   cp config.example.toml ~/.zeroclaw/config.toml
 #   # Edit the api_key line below with your real key
 #
-# Supported key formats:
-#   Gemini AI Studio: AIzaSy...  (get from https://aistudio.google.com/apikey)
-#   Gemini CLI OAuth: AQ.Ab8... (from `gemini auth login`)
+# Supported providers (pick ONE and uncomment the matching section below):
+#   OpenRouter:  sk-or-v1-...  (get from https://openrouter.ai/keys)
+#   Gemini:      AIzaSy...     (get from https://aistudio.google.com/apikey)
+#   Groq:        gsk_...       (get from https://console.groq.com/keys)
 # ─────────────────────────────────────────────────────────────
 
 schema_version = 3
@@ -651,7 +705,7 @@ auto_approve = ["*"]
 
 [agents.main]
 enabled = true
-model_provider = "gemini.default"
+model_provider = "openrouter.default"   # ← change to match your provider below
 risk_profile = "default"
 acp_enable_mcp = false
 delegate_same_risk_profile = true
@@ -672,9 +726,20 @@ timeout_secs = 5
 [agents.main.workspace]
 unrestricted_filesystem = false
 
-[providers.models.gemini.default]
-api_key = "YOUR_GEMINI_API_KEY_HERE"   # <── Replace this
-model = "gemini-2.0-flash"
+# ─── OPTION A: OpenRouter (RECOMMENDED for multi-step SOP runs) ───
+[providers.models.openrouter.default]
+api_key = "sk-or-v1-YOUR_OPENROUTER_API_KEY"   # ← Replace this
+model = "openai/gpt-4o-mini"
+
+# ─── OPTION B: Gemini (free tier has 5 RPM limit — may fail on SOPs) ───
+# [providers.models.gemini.default]
+# api_key = "YOUR_GEMINI_API_KEY_HERE"
+# model = "gemini-2.0-flash"
+
+# ─── OPTION C: Groq (fast but 12K TPM limit — use small models) ───
+# [providers.models.groq.default]
+# api_key = "gsk_YOUR_GROQ_API_KEY"
+# model = "llama-3.1-8b-instant"
 
 [plugins]
 enabled = true
@@ -819,6 +884,7 @@ config = { solana_rpc_url = "https://api.mainnet-beta.solana.com" }
 [system] [2m2026-08-03T12:13:36.437318Z[0m [32m INFO[0m [2mzeroclaw_log_event[0m[2m:[0m [3mzc_name[0m[2m=[0mzeroclaw_runtime::sop::dispatch [3mzc_action[0m[2m=[0mnote [3mzc_outcome[0m[2m=[0munknown [3mzc_category[0m[2m=[0m [3mzc_attrs[0m[2m=[0m [3mzc_has_duration[0m[2m=[0mfalse [3mzc_duration_ms[0m[2m=[0m0 [3mzc_file[0m[2m=[0mcrates/zeroclaw-runtime/src/sop/dispatch.rs [3mzc_line[0m[2m=[0m201 SOP dispatch: 1 SOP(s) matched: ["solana-transfer-guard"]
 [system] [2m2026-08-03T12:13:36.437594Z[0m [32m INFO[0m [2mzeroclaw_log_event[0m[2m:[0m [3mzc_name[0m[2m=[0mzeroclaw_runtime::sop::dispatch [3mzc_action[0m[2m=[0mnote [3mzc_outcome[0m[2m=[0munknown [3mzc_category[0m[2m=[0m [3mzc_attrs[0m[2m=[0m{"reason":"SOP 'solana-transfer-guard' held (a run is already in flight)","sop_name":"solana-transfer-guard"} [3mzc_has_duration[0m[2m=[0mfalse [3mzc_duration_ms[0m[2m=[0m0 [3mzc_file[0m[2m=[0mcrates/zeroclaw-runtime/src/sop/dispatch.rs [3mzc_line[0m[2m=[0m272 SOP dispatch: deferred 'solana-transfer-guard' (backpressure): SOP 'solana-transfer-guard' held (a run is already in flight)
 [system] [2m2026-08-03T12:13:36.437687Z[0m [32m INFO[0m [2mzeroclaw_log_event[0m[2m:[0m [3mzc_name[0m[2m=[0mzeroclaw_runtime::sop::dispatch [3mzc_action[0m[2m=[0mnote [3mzc_outcome[0m[2m=[0munknown [3mzc_category[0m[2m=[0m [3mzc_attrs[0m[2m=[0m{"reason":"SOP 'solana-transfer-guard' held (a run is already in flight)","sop_name":"solana-transfer-guard"} [3mzc_has_duration[0m[2m=[0mfalse [3mzc_duration_ms[0m[2m=[0m0 [3mzc_file[0m[2m=[0mcrates/zeroclaw-runtime/src/sop/dispatch.rs [3mzc_line[0m[2m=[0m519 SOP headless dispatch: deferred 'solana-transfer-guard' (backpressure): SOP 'solana-transfer-guard' held (a run is already in flight)
+[system] [2m2026-08-03T12:18:56.512394Z[0m [32m INFO[0m [2mzeroclaw_log_event[0m[2m:[0m [3mzc_name[0m[2m=[0mzeroclaw [3mzc_action[0m[2m=[0mnote [3mzc_outcome[0m[2m=[0munknown [3mzc_category[0m[2m=[0m [3mzc_attrs[0m[2m=[0m{"cron_no_match":0,"cron_skipped":0,"cron_started":0,"pruned_runs":0,"reaped_claims":0,"timed_out":1} [3mzc_has_duration[0m[2m=[0mfalse [3mzc_duration_ms[0m[2m=[0m0 [3mzc_file[0m[2m=[0msrc/main.rs [3mzc_line[0m[2m=[0m7683 SOP maintenance tick
 
 ```
 
@@ -7280,13 +7346,14 @@ NC='\033[0m'
 PLUGIN_REPO="$(cd "$(dirname "$0")" && pwd)"
 ZEROCLAW_REPO="${ZEROCLAW_REPO:-$(cd "$PLUGIN_REPO/../zeroclaw" 2>/dev/null && pwd || echo "")}"
 PLUGIN_DIR="$HOME/.zeroclaw/plugins"
+SOP_RUNS_DB="$HOME/.zeroclaw/data/sop/runs.db"
 
 echo -e "${BLUE}==============================================================${NC}"
 echo -e "${BLUE}  ZEROCLAW SOLANA PLUGINS — HOST BUILD & VERIFICATION         ${NC}"
 echo -e "${BLUE}==============================================================${NC}\n"
 
 # ── Tahap 0: Record ZeroClaw commit hash ──
-echo -e "${CYAN}[0/6] Recording ZeroClaw host commit hash...${NC}"
+echo -e "${CYAN}[0/7] Recording ZeroClaw host commit hash...${NC}"
 if [ -d "$ZEROCLAW_REPO/.git" ]; then
     ZEROCLAW_COMMIT=$(cd "$ZEROCLAW_REPO" && git log -1 --oneline)
     echo -e "${GREEN}  ZeroClaw commit: ${ZEROCLAW_COMMIT}${NC}"
@@ -7298,21 +7365,21 @@ else
 fi
 
 # ── Tahap 1: Run unit tests ──
-echo -e "\n${CYAN}[1/6] Running unit test suite (49 tests across 3 crates)...${NC}\n"
+echo -e "\n${CYAN}[1/7] Running unit test suite (49 tests across 3 crates)...${NC}\n"
 (cd "$PLUGIN_REPO/plugins/solana-lite" && cargo test --quiet)
 (cd "$PLUGIN_REPO/plugins/token-risk-check" && cargo test --quiet)
 (cd "$PLUGIN_REPO/plugins/spl-transfer-build" && cargo test --quiet)
 echo -e "${GREEN}  ✅ All unit tests passed${NC}"
 
 # ── Tahap 2: Build WASM components ──
-echo -e "\n${CYAN}[2/6] Building WASM components (wasm32-wasip2)...${NC}"
+echo -e "\n${CYAN}[2/7] Building WASM components (wasm32-wasip2)...${NC}"
 (cd "$PLUGIN_REPO/plugins/token-risk-check" && cargo build --target wasm32-wasip2 --release --quiet)
 echo -e "${GREEN}  ✅ token_risk_check.wasm built${NC}"
 (cd "$PLUGIN_REPO/plugins/spl-transfer-build" && cargo build --target wasm32-wasip2 --release --quiet)
 echo -e "${GREEN}  ✅ spl_transfer_build.wasm built${NC}"
 
 # ── Tahap 3: Build ZeroClaw host with plugin support ──
-echo -e "\n${CYAN}[3/6] Building ZeroClaw host with WASM plugin support...${NC}"
+echo -e "\n${CYAN}[3/7] Building ZeroClaw host with WASM plugin support...${NC}"
 ZEROCLAW_BIN=""
 if [ -d "$ZEROCLAW_REPO" ]; then
     (cd "$ZEROCLAW_REPO" && cargo build --release --features plugins-wasm,plugins-wasm-cranelift --quiet)
@@ -7334,7 +7401,7 @@ else
 fi
 
 # ── Tahap 4: Install plugins into host directory ──
-echo -e "\n${CYAN}[4/6] Installing WASM plugins into $PLUGIN_DIR ...${NC}"
+echo -e "\n${CYAN}[4/7] Installing WASM plugins into $PLUGIN_DIR ...${NC}"
 mkdir -p "$PLUGIN_DIR/token-risk-check"
 mkdir -p "$PLUGIN_DIR/spl-transfer-build"
 
@@ -7354,7 +7421,7 @@ ls -la "$PLUGIN_DIR/token-risk-check/"
 ls -la "$PLUGIN_DIR/spl-transfer-build/"
 
 # ── Tahap 5: Enable plugin system & verify discovery ──
-echo -e "\n${CYAN}[5/6] Enabling plugin system and verifying discovery...${NC}"
+echo -e "\n${CYAN}[5/7] Enabling plugin system and verifying discovery...${NC}"
 "$ZEROCLAW_BIN" config set plugins.enabled true
 "$ZEROCLAW_BIN" config set plugins.auto_discover true
 "$ZEROCLAW_BIN" config set plugins.security.signature_mode disabled
@@ -7366,8 +7433,27 @@ echo ""
 "$ZEROCLAW_BIN" plugin info token-risk-check
 "$ZEROCLAW_BIN" plugin info spl-transfer-build
 
-# ── Tahap 6: Smoke test (requires LLM API key) ──
-echo -e "\n${CYAN}[6/6] Smoke test — invoking plugin via ZeroClaw agent...${NC}"
+# ── Tahap 6: Clear stale SOP claims (prevents "SOP held" errors) ──
+echo -e "\n${CYAN}[6/7] Clearing stale SOP claims (if any)...${NC}"
+if [ -f "$SOP_RUNS_DB" ]; then
+    python3 -c "
+import sqlite3
+conn = sqlite3.connect('$SOP_RUNS_DB')
+c = conn.cursor()
+# Clear any stale concurrency claims from interrupted runs
+c.execute('DELETE FROM sop_claims')
+# Mark any non-terminal runs as terminal so they don't block new runs
+c.execute('UPDATE sop_runs SET terminal = 1 WHERE terminal = 0')
+conn.commit()
+print('  Stale SOP claims cleared, orphaned runs marked terminal.')
+"
+    echo -e "${GREEN}  ✅ SOP claim table clean${NC}"
+else
+    echo -e "${YELLOW}  No SOP runs database found yet (first run). Skipping.${NC}"
+fi
+
+# ── Tahap 7: Smoke test (requires LLM API key) ──
+echo -e "\n${CYAN}[7/7] Smoke test — invoking plugin via ZeroClaw agent...${NC}"
 
 # Detect which LLM provider to use
 PROVIDER=""
