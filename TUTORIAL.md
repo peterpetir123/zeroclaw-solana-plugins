@@ -1,57 +1,57 @@
 # 📖 Tutorial: Solana DeFi Guardian Execution Guide
 
-Tutorial langkah demi langkah untuk menjalankan audit keamanan token Solana, mengonfigurasi agent ZeroClaw, dan mengeksekusi alur Standard Operating Procedure (SOP) dengan pertahanan Human-in-the-Loop (HITL).
+A step-by-step tutorial to run Solana token security audits, configure the ZeroClaw AI agent runtime, and execute the Standard Operating Procedure (SOP) governance workflow with Human-in-the-Loop (HITL) protection.
 
 ---
 
-## 📋 Prasyarat Sistem (Prerequisites)
+## 📋 System Prerequisites
 
-1. **Rust Toolchain**: `rustc` dan `cargo` dengan target WASM `wasm32-wasip2`
+1. **Rust Toolchain**: `rustc` and `cargo` with the WebAssembly `wasm32-wasip2` compilation target:
    ```bash
    rustup target add wasm32-wasip2
    ```
-2. **Python 3**: Untuk pengolahan JSON & pembersihan database sederhana.
-3. **Repository Codebase**:
-   - Repository Plugin Ini: `/home/hengkerprotzy/coding/zeroclaw-solana-plugins`
-   - Repository Host ZeroClaw: `/home/hengkerprotzy/coding/zeroclaw`
+2. **Python 3**: For basic JSON parsing and database maintenance.
+3. **Repository Workspace**:
+   - Plugin Repository (this repo): `/home/hengkerprotzy/coding/zeroclaw-solana-plugins`
+   - ZeroClaw Host Repository: `/home/hengkerprotzy/coding/zeroclaw`
 
 ---
 
-## 🚀 Tahap 1: Pengujian Unit Test Core & WASM Binaries
+## 🚀 Step 1: Run Core Failsafe Unit Tests & Build WASM Components
 
-Sebelum menjalankan daemon, pastikan seluruh 49 unit test keamanan lulus 100%:
+Before launching the ZeroClaw daemon, verify that all 49 security unit tests pass:
 
 ```bash
-# 1. Masuk ke direktori plugin
+# 1. Enter the plugin repository directory
 cd /home/hengkerprotzy/coding/zeroclaw-solana-plugins
 
-# 2. Jalankan unit test untuk ketiga crate
+# 2. Run unit tests across all three crates
 (cd plugins/solana-lite && cargo test)
 (cd plugins/token-risk-check && cargo test)
 (cd plugins/spl-transfer-build && cargo test)
 
-# 3. Build WASM binaries (target wasm32-wasip2)
+# 3. Build WebAssembly binaries (wasm32-wasip2 target)
 (cd plugins/token-risk-check && cargo build --target wasm32-wasip2 --release)
 (cd plugins/spl-transfer-build && cargo build --target wasm32-wasip2 --release)
 ```
 
 ---
 
-## 🛡️ Tahap 2: Live Audit via CLI (Read-Only Risk Check)
+## 🛡️ Step 2: Live Mainnet Audit via CLI (Read-Only Risk Check)
 
-Anda dapat mengaudit token apa pun secara langsung di mainnet Solana tanpa perlu menjalankan daemon ZeroClaw:
+You can audit any Solana token mint directly on mainnet without running the full ZeroClaw daemon:
 
 ```bash
-# Contoh audit mint USDC di Mainnet Solana
+# Example: Audit USDC mint address on Solana Mainnet
 (cd plugins/token-risk-check && cargo run --bin token-risk-check-cli EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v)
 ```
 
 ---
 
-## ⚙️ Tahap 3: Mempersiapkan & Menjalankan ZeroClaw Daemon
+## ⚙️ Step 3: Database Cleanup & Launching ZeroClaw Daemon
 
 ```bash
-# 1. Bersihkan stale lock pada database (jika ada sisa run lama yang belum selesai)
+# 1. Clear any stale concurrency locks in the SQLite database (from interrupted previous runs)
 python3 -c "
 import sqlite3, os
 db_path = os.path.expanduser('~/.zeroclaw/data/sop/runs.db')
@@ -61,28 +61,28 @@ if os.path.exists(db_path):
     c.execute('DELETE FROM sop_claims')
     c.execute('UPDATE sop_runs SET terminal = 1 WHERE terminal = 0')
     conn.commit()
-    print('✅ Database disiapkan dan disinkronkan.')
+    print('✅ Database synced and stale claims cleared.')
 "
 
-# 2. Pastikan daemon lama dihentikan
+# 2. Ensure previous daemon instances are stopped
 pkill -9 zeroclaw 2>/dev/null || true
 sleep 1
 
-# 3. Jalankan Daemon ZeroClaw di Background
+# 3. Launch ZeroClaw Daemon in background
 (cd /home/hengkerprotzy/coding/zeroclaw && ./target/release/zeroclaw daemon -v > /home/hengkerprotzy/coding/zeroclaw-solana-plugins/daemon_live.log 2>&1 &)
 
-# 4. Verifikasi status kesehatan daemon
+# 4. Verify daemon health status
 sleep 3
-curl -s http://127.0.0.1:42617/health | python3 -c "import sys,json; d=json.load(sys.stdin); print('Status Daemon:', d['status'], '| PID:', d['runtime']['pid'])"
+curl -s http://127.0.0.1:42617/health | python3 -c "import sys,json; d=json.load(sys.stdin); print('Daemon Status:', d['status'], '| PID:', d['runtime']['pid'])"
 ```
 
 ---
 
-## 🔄 Tahap 4: Eksekusi SOP End-to-End (`solana-transfer-guard`)
+## 🔄 Step 4: Execute End-to-End SOP Governance Pipeline (`solana-transfer-guard`)
 
-SOP ini memiliki 4 langkah dengan 2 checkpoint persetujuan manusia (Human-in-the-Loop):
+The SOP enforces a 4-stage pipeline containing 2 mandatory Human-in-the-Loop (HITL) approval checkpoints:
 
-### Langkah 4.1: Trigger SOP Run Baru via HTTP Gateway
+### Step 4.1: Trigger New SOP Run via HTTP Gateway
 ```bash
 cd /home/hengkerprotzy/coding/zeroclaw-solana-plugins
 
@@ -90,60 +90,60 @@ RESULT=$(curl -s -X POST http://127.0.0.1:42617/api/sops/solana-transfer-guard/r
   -H "Content-Type: application/json" \
   -d '{"payload": "{\"mint_address\": \"So11111111111111111111111111111111111111112\", \"from\": \"4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU\", \"to\": \"675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8\", \"amount\": \"100000\"}"}')
 
-echo "Respon Trigger: $RESULT"
+echo "Trigger Response: $RESULT"
 
-# Simpan RUN_ID ke variabel terminal
+# Export RUN_ID to environment variable
 export RUN_ID=$(echo $RESULT | python3 -c "import sys,json; print(json.load(sys.stdin).get('run_id',''))")
-echo "RUN_ID Aktif: $RUN_ID"
+echo "Active RUN_ID: $RUN_ID"
 ```
 
-### Langkah 4.2: Cek Status Overlay & Approve HITL Gate Pertama (Step 2)
+### Step 4.2: Check Overlay State & Approve First HITL Gate (Step 2)
 ```bash
-# 1. Cek status overlay (Step 1 selesai, Step 2 waiting_approval)
+# 1. Query overlay status (Step 1 completed, Step 2 waiting_approval)
 curl -s http://127.0.0.1:42617/api/sops/solana-transfer-guard/runs/$RUN_ID/overlay | python3 -m json.tool
 
-# 2. Berikan persetujuan manusia untuk lanjut ke Step 3 (Build Tx)
+# 2. Grant operator approval to proceed to Step 3 (Build Tx)
 /home/hengkerprotzy/coding/zeroclaw/target/release/zeroclaw sop approve $RUN_ID
 ```
 
-### Langkah 4.3: Polling & Approve HITL Gate Kedua (Step 4)
+### Step 4.3: Polling & Approve Second HITL Gate (Step 4)
 ```bash
-# Tunggu ~8-10 detik sampai Step 3 selesai membangun unsigned transaction payload
+# Wait ~8-10 seconds for Step 3 to assemble the unsigned transaction payload
 sleep 8
 
-# Cek overlay status (Step 4 waiting_approval)
+# Query overlay status (Step 4 waiting_approval)
 curl -s http://127.0.0.1:42617/api/sops/solana-transfer-guard/runs/$RUN_ID/overlay | python3 -m json.tool
 
-# Berikan persetujuan final manusia untuk menyelesaikan SOP
+# Grant final operator approval to finalize the SOP run
 /home/hengkerprotzy/coding/zeroclaw/target/release/zeroclaw sop approve $RUN_ID
 ```
 
-### Langkah 4.4: Verifikasi Hasil Akhir SOP (`completed`)
+### Step 4.4: Verify Final SOP Completion (`completed`)
 ```bash
 sleep 3
 
-# Cek overlay akhir: Harus menunjukkan status 'completed' pada ke-4 node
+# Check final overlay status: all 4 nodes must show 'completed' state
 curl -s http://127.0.0.1:42617/api/sops/solana-transfer-guard/runs/$RUN_ID/overlay | python3 -m json.tool
 ```
 
 ---
 
-## 🔍 Tahap 5: Pengujian Pertahanan Prompt Injection
+## 🔍 Step 5: Test Prompt Injection Security Defenses
 
-Uji ketahanan plugin terhadap upaya instruksi manipulatif (seperti transfer `"all"` atau `"max"`):
+Verify the plugin's fail-closed behavior against malicious natural language input (e.g. transfer `"all"` or `"max"`):
 
 ```bash
-# Jalankan test khusus fail-closed di level Rust WASM
+# Run WASM-level Rust security unit tests
 (cd plugins/spl-transfer-build && cargo test injection_via_amount_field_fails_closed -- --nocapture)
 (cd plugins/token-risk-check && cargo test prompt_injection_in_mint_address_fails_closed -- --nocapture)
 ```
 
 ---
 
-## 🛠️ Troubleshooting Ringkas
+## 🛠️ Quick Troubleshooting Guide
 
-| Gejala Error | Penyebab | Cara Mengatasi |
+| Issue / Error | Root Cause | Solution |
 |---|---|---|
-| `RESULT: {"error":"SOP held (a run is already in flight)"}` | Ada run lama yang menggantung di DB | Jalankan pembersihan DB di Tahap 3, lalu pkill dan restart daemon. |
-| `error: required argument <RUN_ID> not provided` | Variabel `$RUN_ID` kosong karena daemon belum siap saat `curl` dipanggil | Pastikan daemon running (`curl http://127.0.0.1:42617/health`), lalu ulangi Tahap 4.1. |
-| `cd: no such file or directory: plugins/...` | Berada di folder `zeroclaw` alih-alih `zeroclaw-solana-plugins` | Jalankan `cd /home/hengkerprotzy/coding/zeroclaw-solana-plugins` terlebih dahulu. |
+| `RESULT: {"error":"SOP held (a run is already in flight)"}` | Stale concurrency claim in SQLite DB | Run the database cleanup script in Step 3, then kill and restart the daemon. |
+| `error: required argument <RUN_ID> not provided` | Empty `$RUN_ID` because daemon was unreachable during `curl` call | Ensure daemon is running (`curl http://127.0.0.1:42617/health`), then re-run Step 4.1. |
+| `cd: no such file or directory: plugins/...` | Shell is in `zeroclaw` directory instead of `zeroclaw-solana-plugins` | Run `cd /home/hengkerprotzy/coding/zeroclaw-solana-plugins` first. |

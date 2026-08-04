@@ -35,7 +35,7 @@ echo -e "${BLUE}==============================================================${
 echo -e "${BLUE}  ZEROCLAW SOLANA PLUGINS — HOST BUILD & VERIFICATION         ${NC}"
 echo -e "${BLUE}==============================================================${NC}\n"
 
-# ── Tahap 0: Record ZeroClaw commit hash ──
+# ── Stage 0: Record ZeroClaw commit hash ──
 echo -e "${CYAN}[0/7] Recording ZeroClaw host commit hash...${NC}"
 if [ -d "$ZEROCLAW_REPO/.git" ]; then
     ZEROCLAW_COMMIT=$(cd "$ZEROCLAW_REPO" && git log -1 --oneline)
@@ -47,21 +47,21 @@ else
     ZEROCLAW_COMMIT="(not available)"
 fi
 
-# ── Tahap 1: Run unit tests ──
+# ── Stage 1: Run unit tests ──
 echo -e "\n${CYAN}[1/7] Running unit test suite (49 tests across 3 crates)...${NC}\n"
 (cd "$PLUGIN_REPO/plugins/solana-lite" && cargo test --quiet)
 (cd "$PLUGIN_REPO/plugins/token-risk-check" && cargo test --quiet)
 (cd "$PLUGIN_REPO/plugins/spl-transfer-build" && cargo test --quiet)
 echo -e "${GREEN}  ✅ All unit tests passed${NC}"
 
-# ── Tahap 2: Build WASM components ──
+# ── Stage 2: Build WASM components ──
 echo -e "\n${CYAN}[2/7] Building WASM components (wasm32-wasip2)...${NC}"
 (cd "$PLUGIN_REPO/plugins/token-risk-check" && cargo build --target wasm32-wasip2 --release --quiet)
 echo -e "${GREEN}  ✅ token_risk_check.wasm built${NC}"
 (cd "$PLUGIN_REPO/plugins/spl-transfer-build" && cargo build --target wasm32-wasip2 --release --quiet)
 echo -e "${GREEN}  ✅ spl_transfer_build.wasm built${NC}"
 
-# ── Tahap 3: Build ZeroClaw host with plugin support ──
+# ── Stage 3: Build ZeroClaw host with plugin support ──
 echo -e "\n${CYAN}[3/7] Building ZeroClaw host with WASM plugin support...${NC}"
 ZEROCLAW_BIN=""
 if [ -d "$ZEROCLAW_REPO" ]; then
@@ -83,7 +83,7 @@ else
     exit 1
 fi
 
-# ── Tahap 4: Install plugins into host directory ──
+# ── Stage 4: Install plugins into host directory ──
 echo -e "\n${CYAN}[4/7] Installing WASM plugins into $PLUGIN_DIR ...${NC}"
 mkdir -p "$PLUGIN_DIR/token-risk-check"
 mkdir -p "$PLUGIN_DIR/spl-transfer-build"
@@ -103,7 +103,7 @@ echo -e "${GREEN}  ✅ Installed:${NC}"
 ls -la "$PLUGIN_DIR/token-risk-check/"
 ls -la "$PLUGIN_DIR/spl-transfer-build/"
 
-# ── Tahap 5: Enable plugin system & verify discovery ──
+# ── Stage 5: Enable plugin system & verify discovery ──
 echo -e "\n${CYAN}[5/7] Enabling plugin system and verifying discovery...${NC}"
 "$ZEROCLAW_BIN" config set plugins.enabled true
 "$ZEROCLAW_BIN" config set plugins.auto_discover true
@@ -116,7 +116,7 @@ echo ""
 "$ZEROCLAW_BIN" plugin info token-risk-check
 "$ZEROCLAW_BIN" plugin info spl-transfer-build
 
-# ── Tahap 6: Clear stale SOP claims (prevents "SOP held" errors) ──
+# ── Stage 6: Clear stale SOP claims (prevents "SOP held" errors) ──
 echo -e "\n${CYAN}[6/7] Clearing stale SOP claims (if any)...${NC}"
 if [ -f "$SOP_RUNS_DB" ]; then
     python3 -c "
@@ -135,7 +135,7 @@ else
     echo -e "${YELLOW}  No SOP runs database found yet (first run). Skipping.${NC}"
 fi
 
-# ── Tahap 7: Smoke test (requires LLM API key) ──
+# ── Stage 7: Smoke test (requires LLM API key) ──
 echo -e "\n${CYAN}[7/7] Smoke test — invoking plugin via ZeroClaw agent...${NC}"
 
 # Detect which LLM provider to use
